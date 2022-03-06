@@ -4,8 +4,10 @@
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+#define DEBUG
 
 typedef enum
 {
@@ -25,6 +27,18 @@ struct Token
     int strlen;     //限制str的长度
 };
 
+
+//****************prase******************//
+
+//AST node type
+typedef enum
+{
+    NK_ADD,     //  +
+    NK_SUB,     //  -
+    NK_NUM,     //  integer
+    NK_DIV,     //  /
+    NK_MUL,     //  *
+} NodeKind;
 /*************sym table*****************/ 
 typedef struct Temp Temp;
 struct Temp
@@ -55,17 +69,6 @@ struct ConstvalList
     Constval constval;
 };
 
-//****************prase******************//
-
-//AST node type
-typedef enum
-{
-    NK_ADD,     //  +
-    NK_SUB,     //  -
-    NK_NUM,     //  integer
-} NodeKind;
-
-
 // AST node
 typedef struct Node Node;
 struct Node
@@ -79,11 +82,15 @@ struct Node
 
 };
 
+
+
 // quad node
 typedef enum
 {
     QK_ADD,
     QK_SUB,
+    QK_DIV,
+    QK_MUL,
 } QuadKind;
 typedef struct Quad Quad;
 struct Quad
@@ -121,6 +128,7 @@ extern QuadSet *quadset;
 // funtion of tokenize
 bool consume(char op);
 int expect_num();
+void expect(char op);
 Token *tokenize();
 
 //function of symtable

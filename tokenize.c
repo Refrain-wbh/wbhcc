@@ -34,7 +34,12 @@ int expect_num()
     curtoken = curtoken->next;
     return val;
 }
-
+void expect(char op)
+{
+    if(curtoken->kind!=TK_PUNCT || curtoken->str[0]!=op)
+        error_at(curtoken->str,"expect '%c'",op);
+    curtoken = curtoken->next;
+}
 bool consume(char op)
 {
     if(curtoken->kind!=TK_PUNCT||*curtoken->str!=op)
@@ -75,6 +80,10 @@ Token *tokenize()
         {
             cur = new_token(TK_PUNCT, cur, p, 1);
             p++;
+        }
+        else 
+        {
+            error_at(p, "invalid token");
         }
     }
     cur = new_token(TK_EOF, cur, p, 0);

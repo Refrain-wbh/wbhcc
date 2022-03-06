@@ -5,7 +5,7 @@
 typedef enum
 {
     RS_NULL,
-    RS_NOTUSE,
+    RS_NOTUSE, //表示寄存器不能使用，例如要保留一个寄存器以备后用的时候可以设置这个标志
     RS_CONST,
     RS_TMP,
     RS_VAL, // if content is num
@@ -36,6 +36,7 @@ static char *regname[] = {
     "%r14d",
     "%r15d",
 };
+
 static int regnum = sizeof(regname) / sizeof(regname[0]);
 static Rvalue rvalue[sizeof(regname) / sizeof(regname[0])];
 
@@ -72,7 +73,13 @@ char* getReg(Quad*quad)
 }
 */
 
-
+static int regidx(char *name)
+{
+    for (int i = 1; i < regnum;++i)
+        if(strcmp(name,regname[i])==0)
+            return i;
+    return 0;
+}
 static int get_reg(Node*node)
 {
     int regstate = 0;
@@ -104,7 +111,7 @@ static void store(int reg)
 {
     if(rvalue[reg].kind==RS_TMP)
     {
-        print("\tmov %s,",regname[reg]);
+        print("\tmovl %s,",regname[reg]);
         print_tempaddr(codeout, rvalue[reg].temp);
         print("\n");
         rvalue[reg].temp->inmemory = 1;
@@ -113,7 +120,8 @@ static void store(int reg)
 //设置reg以及对应的变量常量等表
 static void set_reg(Node*node,int reg)
 {
-    if(node->kind==NK_NUM)
+    clear_reg(reg);
+    if (node->kind == NK_NUM)
     {
         rvalue[reg].kind = RS_CONST;
         rvalue[reg].constval = node->constval;
@@ -131,11 +139,11 @@ static void load(Node*node,int reg)
 {
     if(node->kind==NK_NUM)
     {
-        print("\tmov $%d,%s\n", node->constval->val, regname[reg]);
+        print("\tmovl $%d,%s\n", node->constval->val, regname[reg]);
     }
     else 
     {
-        print("\tmov ");
+        print("\tmovl ");
         print_tempaddr(codeout, node->temp);
         print(",%s\n", regname[reg]);
     }
@@ -222,10 +230,72 @@ void gen_2operate_code(Quad*quad)
     case QK_SUB:
         print("\tsubl %s,%s\n", regname[regy], regname[regx]);
         break;
+    case QK_MUL:
+        print("\timull %s,%s\n", regname[regy], regname[regx]);
+        break;
     default:
         break;
     }
 }
+//由于除法指令需要保证[edx;eax]为被除数，所以没有和上文统一格式，因而单独生成
+// [edx;eax] / y  -> 商：%eax  余数： %edx
+//所以这里会进行一系列整除和商的运算
+void gen_div_code(Quad*quad)
+{
+    const int edx = 4, eax = 1;
+#ifdef DEBUG
+    assert(strcmp(regname[edx], "%edx") == 0);
+    assert(strcmp(regname[eax], "%eax") == 0);
+#endif
+    //首先清空edx
+    if(rvalue[edx].kind!=RS_NULL)
+    {
+        store(edx);
+        clear_reg(edx);
+    }
+    rvalue[edx].kind = RS_NOTUSE;
+
+    int xreg = get_reg(quad->arg1);
+    if(xreg!=eax)
+    {
+        if(rvalue[eax].kind!=RS_NULL)
+            store(eax);
+        
+        if(xreg==0)
+        {
+            set_reg(quad->arg1,eax);
+            load(quad->arg1, eax);
+        }
+        else 
+        {
+            clear_reg(xreg);
+            set_reg(quad->arg1, eax);
+            print("\tmovl %s,%%eax\n", regname[xreg]);
+        }
+    }
+
+    //加载y
+    if(!inreg(quad->arg2))
+    {
+        RvalKind tmpkind = rvalue[eax].kind;
+        rvalue[eax].kind = RS_NOTUSE;
+
+        int yreg = alloc_reg();
+        set_reg(quad->arg2, yreg);
+        load(quad->arg2, yreg);
+        
+        rvalue[eax].kind = tmpkind;
+    }
+
+    print("\tcltd\n");
+    print("\tidivl %s\n", regname[get_reg(quad->arg2)]);
+
+    if(quad->op==QK_DIV)
+        set_reg(quad->result, eax);
+    
+
+}
+//
 
 //if value is in reg then just return 
 //else chose a reg and load
@@ -272,7 +342,11 @@ void gen_code()
         //如果在内存中，则需要一次加载，这个时候分配一个寄存器即可。
         case QK_ADD:
         case QK_SUB:
+        case QK_MUL:
             gen_2operate_code(quad);
+            break;
+        case QK_DIV:
+            gen_div_code(quad);
             break;
         default:
             break;
@@ -280,6 +354,6 @@ void gen_code()
     }
 
     Quad *quad = &quadset->list[quadset->size - 1];
-    print("\tmov %s,%%eax\n", regname[get_reg(quad->result)]);
+    print("\tmovl %s,%%eax\n", regname[get_reg(quad->result)]);
     print("\tret\n");
 }

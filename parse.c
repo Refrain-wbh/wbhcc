@@ -1,34 +1,51 @@
 #include"wcc.h"
 
 /*####################parse##################*/
-
-
-
+static Node *new_num();
+static Node *new_binary();
 
 
 Node *expr();
 static Node *primary();
-static Node *new_num();
-static Node *new_binary();
+static Node *mul();
 
-//expr:=primary("+" primary | "-" primary)*
+//expr:=mul("+" mul | "-" mul)*
 Node *expr()
 {
-    Node *node = primary();
+    Node *node = mul();
     while(1)
     {
         if(consume('+'))
-            node=new_binary(NK_ADD,node,primary());
+            node=new_binary(NK_ADD,node,mul());
         else if(consume('-'))
-            node = new_binary(NK_SUB, node, primary());
+            node = new_binary(NK_SUB, node, mul());
         else
             return node;
     }
 }
-
-//primary:=num
+//mul:=primary("*" primary | "/" primary)*
+Node * mul()
+{
+    Node *node = primary();
+    while(1)
+    {
+        if(consume('*'))
+            node = new_binary(NK_MUL, node, primary());
+        else if(consume('/'))
+            node = new_binary(NK_DIV, node, primary());
+        else
+            return node;
+    }
+}
+//primary:=num | "(" expr ")"
 Node * primary()
 {
+    if(consume('('))
+    {
+        Node *node = expr();
+        expect(')');
+        return node;
+    }
     return new_num(expect_num());
 }
 
