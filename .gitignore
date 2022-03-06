@@ -1,0 +1,10 @@
+*~
+*.o
+tmp*
+a.out
+wcc
+*.S
+*.s
+*.exe
+*.txt
+.vscode
