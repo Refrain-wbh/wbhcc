@@ -63,23 +63,25 @@ static int gen_operation(NodeKind kind,Node*arg1,Node*arg2,Node*result)
 }
 void gen_quadset(Node*ASTroot)
 {
-    switch (ASTroot->kind)
-    {
-    case NK_ADD:
-    case NK_SUB:
-    case NK_DIV:
-    case NK_MUL:
-    case NK_LE:
-    case NK_EQ:
-    case NK_NE:
-    case NK_LT:
-        gen_quadset(ASTroot->lhs);
-        gen_quadset(ASTroot->rhs);
-        gen_operation(ASTroot->kind, ASTroot->lhs, ASTroot->rhs, ASTroot);
-        break;
+    do{
+        switch (ASTroot->kind)
+        {
+        case NK_ADD:
+        case NK_SUB:
+        case NK_DIV:
+        case NK_MUL:
+        case NK_LE:
+        case NK_EQ:
+        case NK_NE:
+        case NK_LT:
+            gen_quadset(ASTroot->lhs);
+            gen_quadset(ASTroot->rhs);
+            gen_operation(ASTroot->kind, ASTroot->lhs, ASTroot->rhs, ASTroot);
+            break;
         default:
-        break;
-    }
+            break;
+        }
+    } while ((ASTroot = ASTroot->next)!=NULL);
 }
 
 

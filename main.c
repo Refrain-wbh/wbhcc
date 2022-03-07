@@ -27,7 +27,7 @@ int main(int argc, char **argv)
     user_input = argv[1];
     Token *tokenList = tokenize();
     curtoken = tokenList;
-    ASTroot = expr();
+    ASTroot = program();
     gen_quadset(ASTroot);
     print_quadset();
     gen_code();

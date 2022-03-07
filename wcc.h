@@ -42,6 +42,7 @@ typedef enum
     NK_NE,      // !=
     NK_LT,      // <  ### > ==> <
     NK_LE,      // <=
+    
 } NodeKind;
 /*************sym table*****************/ 
 typedef struct Temp Temp;
@@ -81,6 +82,7 @@ struct Node
 
     Node *lhs;      //  left head side
     Node *rhs;      //  right head side
+    Node *next;    //next state
     Constval * constval;       //used if kind == ND_NUM
     Temp *temp;     //used if kind is a operator
 
@@ -134,6 +136,7 @@ extern QuadSet *quadset;
 
 
 // funtion of tokenize
+bool at_eof();
 bool consume(char* op);
 int expect_num();
 void expect(char *op);
@@ -145,7 +148,8 @@ Constval *new_const();
 void print_tempaddr(FILE *out, Temp *temp);
 
 //funtion of parse
-Node *expr();
+Node *program();
+
 
 
 //funtion of quadgen

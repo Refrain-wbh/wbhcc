@@ -24,6 +24,10 @@ void error_at(char * loc,char *fmt,...)
     fprintf(errout, "\n");
     exit(1);
 }
+bool at_eof()
+{
+    return curtoken->kind == TK_EOF;
+}
 int expect_num()
 {
     if(curtoken->kind!=TK_NUM)

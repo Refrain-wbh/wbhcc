@@ -325,7 +325,6 @@ void gen_div_code(Quad*quad)
         set_reg(quad->result, eax);
 }
 
-
 void gen_code()
 {
 

@@ -4,22 +4,44 @@
 static Node *new_num();
 static Node *new_binary();
 
-
-Node *expr();
+Node *program();
+static Node *stmt();
+static Node *expr();
 static Node *primary();
 static Node *mul();
 static Node * unary();
 static Node *equality();
 static Node *relational();
 static Node *add();
+
+
+// program = stmt*
+Node *program()
+{
+    Node head = {};
+    Node *cur = &head;
+    while(!at_eof())
+    {
+        cur->next = stmt();
+        cur = cur->next;
+    }
+    return head.next;
+}
+// stmt = expr ";"
+static Node*stmt()
+{
+    Node *node = expr();
+    expect(";");
+    return node;
+}
 //expr:=equality
-Node*expr()
+static Node*expr()
 {
     return equality();
 }
 
 //equality:=relational("==" relational | "!=" relational) *
-Node * equality()
+static Node * equality()
 {
     Node *node = relational();
     while(1)
@@ -33,7 +55,7 @@ Node * equality()
     }
 }
 //relational:=add(">=" add | "<=" add | ">" add | "<" add) *
-Node * relational()
+static Node * relational()
 {
     Node *node = add();
     while(1)
@@ -52,7 +74,7 @@ Node * relational()
 }
 
 //add:=mul("+" mul | "-" mul)*
-Node *add()    
+static Node *add()    
 {
     Node *node = mul();
     while(1)
@@ -67,7 +89,7 @@ Node *add()
 }
 
 // mul = unary ("*" unary | "/" unary)*
-Node * mul()
+static Node * mul()
 {
     Node *node = unary();
     while(1)
@@ -92,7 +114,7 @@ static Node*unary()
     return primary();
 }
 //primary:=num | "(" expr ")"
-Node * primary()
+static Node * primary()
 {
     if(consume("("))
     {
@@ -104,7 +126,7 @@ Node * primary()
 }
 
 //calloc one AST Node for integer num
-Node * new_num(long val)
+static Node * new_num(long val)
 {
     Node *node = calloc(1, sizeof(Node));
     node->constval = new_const();
@@ -114,7 +136,7 @@ Node * new_num(long val)
 }
 
 //calloc one AST Node for two-operand operator 
-Node * new_binary(NodeKind kind,Node*lhs,Node*rhs)
+static Node * new_binary(NodeKind kind,Node*lhs,Node*rhs)
 {
     Node *node = calloc(1, sizeof(Node));
     node->kind = kind;
