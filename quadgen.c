@@ -28,6 +28,7 @@ static int gen_operation(NodeKind kind,Node*arg1,Node*arg2,Node*result)
     quadset->list[idx].arg1 = arg1;
     quadset->list[idx].arg2 = arg2;
     quadset->list[idx].result = result;
+    
 
     Quad *cur = quadset->list + idx;
     switch (kind)
@@ -56,6 +57,9 @@ static int gen_operation(NodeKind kind,Node*arg1,Node*arg2,Node*result)
     case NK_LT:
         cur->op = QK_LT;
         break;
+    case NK_RETURN:
+        cur->op = QK_RETURN;
+        break;
     default:
         break;
     }
@@ -77,6 +81,10 @@ void gen_quadset(Node*ASTroot)
             gen_quadset(ASTroot->lhs);
             gen_quadset(ASTroot->rhs);
             gen_operation(ASTroot->kind, ASTroot->lhs, ASTroot->rhs, ASTroot);
+            break;
+        case NK_RETURN:
+            gen_quadset(ASTroot->lhs);
+            gen_operation(ASTroot->kind, ASTroot->lhs, NULL, NULL);
             break;
         default:
             break;

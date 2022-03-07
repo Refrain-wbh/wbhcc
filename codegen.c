@@ -194,7 +194,11 @@ void gen_2operate_code(Quad*quad)
     regx = get_reg(quad->arg1), regy = get_reg(quad->arg2);
     clear_reg(regx);
     set_reg(quad->result, regx);
-
+    
+    //如果是第二个操作数是临时变量，则可以直接丢弃
+    if(rvalue[regy].kind==RS_TMP)
+        clear_reg(regy);
+    
     switch (quad->op)
     {
     case QK_ADD:
@@ -240,6 +244,10 @@ void gen_cmp_code(Quad*quad)
     regx = get_reg(quad->arg1), regy = get_reg(quad->arg2);
     print("\tcmpl %s,%s\n", regname[regy],regname[regx]);
     
+    if(rvalue[regx].kind==RS_TMP)
+        clear_reg(regx);
+    if(rvalue[regy].kind==RS_TMP)
+        clear_reg(regy);
     //然后清空eax，为结果留下空间
     store(eax);
     clear_reg(eax);
@@ -263,6 +271,7 @@ void gen_cmp_code(Quad*quad)
         break;
     }
     print("\tmovzbl %%al,%%eax\n");
+
 
 }
 
@@ -323,6 +332,42 @@ void gen_div_code(Quad*quad)
 
     if(quad->op==QK_DIV)
         set_reg(quad->result, eax);
+
+    //如果除数为临时变量，则直接丢弃
+    int regy = get_reg(quad->arg2);
+    if(rvalue[regy].kind==RS_TMP)
+        clear_reg(regy);
+}
+
+
+/*
+return生成思路：因为需要保存在eax中，所以需要将表达式的最终结果移动到eax中，
+所以首先判断表达式是否已经在eax中，如果没有，则需要将eax清空，
+然后将表达式移动或者加载到eax中*/
+void gen_return_code(Quad*quad)
+{
+    const int eax = 1;
+#ifdef DEBUG
+    assert(strcmp(regname[eax], "%eax") == 0);
+#endif
+    Node *ret = quad->arg1;
+    int reg = get_reg(ret);
+    if(eax!=reg)
+    {
+        store(eax);
+        clear_reg(eax);
+        if(inreg(ret))
+        {
+            print("\tmovl %s,%%eax\n", regname[reg]);
+            clear_reg(reg);
+        }
+        else 
+        {
+            load(ret, eax);
+            //加载之后立刻就失效了，所以不需要做操作
+        }
+    }
+    print("\tret\n");
 }
 
 void gen_code()
@@ -353,12 +398,11 @@ void gen_code()
         case QK_NE:
             gen_cmp_code(quad);
             break;
+        case QK_RETURN:
+            gen_return_code(quad);
+            break;
         default:
             break;
         }
     }
-
-    Quad *quad = &quadset->list[quadset->size - 1];
-    print("\tmovl %s,%%eax\n", regname[get_reg(quad->result)]);
-    print("\tret\n");
 }

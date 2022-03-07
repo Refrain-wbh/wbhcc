@@ -54,7 +54,7 @@ bool consume(char *op)
     return true;
 }
 //判断p是否是以q为开始
-bool startwith(char * p,char * q)
+bool startwith(const char * p,const char * q)
 {
     return strncmp(p, q, strlen(q)) == 0;
 }
@@ -72,42 +72,68 @@ Token *tokenize()
     Token head;
     Token *cur = &head;
     char *p = user_input;
+
+    const char *keys[] = {"return",};
+    const int keyscount = sizeof(keys)/ sizeof(keys[0]);
     //接下来将input解析成为一系列的token
     while(*p)
     {
         if(isspace(*p))
         {
             p++;
+            continue;
         }
-        else if(startwith(p,"==") || //two char punct
-                startwith(p,"!=") ||
-                startwith(p,">=") ||
-                startwith(p,"<="))
+
+        
+        unsigned int i;
+        for (i = 0;i<keyscount;++i)
+        {
+            int keylens = strlen(keys[i]);
+            if(startwith(p,keys[i]) && !isalnum(p[keylens]))
+            {
+                cur = new_token(TK_RESERVED, cur, p, keylens);
+                p += keylens;
+                break;
+            }
+        }
+        if(i<keyscount)
+            continue;
+
+        if (startwith(p, "==") || // two char punct
+            startwith(p, "!=") ||
+            startwith(p, ">=") ||
+            startwith(p, "<="))
         {
             cur = new_token(TK_RESERVED, cur, p, 2);
             p += 2;
+            continue;
         }
-        else if(isdigit(*p))
+
+
+        if(isdigit(*p))
         {
             char *q = p;
             cur = new_token(TK_NUM, cur, p, 0);
             cur->val = strtol(p, &p, 10);
             cur->strlen = p - q;
+            continue;
         }
-        else if(ispunct(*p)) //single char punct
+
+
+        if(ispunct(*p)) //single char punct
         {
             cur = new_token(TK_RESERVED, cur, p, 1);
             p++;
+            continue;
         }
-        else 
-        {
-            error_at(p, "invalid token");
-        }
+        
+        error_at(p, "invalid token");
+        
     }
     cur = new_token(TK_EOF, cur, p, 0);
 
-    /*
-    printf("token list:\n");
+    
+    /*printf("token list:\n");
     for (Token *i = head.next; i != NULL; i = i->next)
         printf("%d,%.*s,%d\n", i->kind, i->strlen, i->str,i->val);
     printf("token list end\n");*/

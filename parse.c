@@ -1,8 +1,9 @@
 #include"wcc.h"
 
 /*####################parse##################*/
-static Node *new_num();
-static Node *new_binary();
+static Node *new_num(long val);
+static Node *new_binary(NodeKind kind, Node *lhs, Node *rhs);
+static Node *new_unary(NodeKind kind,Node*expr);
 
 Node *program();
 static Node *stmt();
@@ -28,8 +29,15 @@ Node *program()
     return head.next;
 }
 // stmt = expr ";"
+//      | "return" expr ";"
 static Node*stmt()
 {
+    if(consume("return"))
+    {
+        Node *node = new_unary(NK_RETURN, expr());
+        expect(";");
+        return node;
+    }
     Node *node = expr();
     expect(";");
     return node;
@@ -143,5 +151,12 @@ static Node * new_binary(NodeKind kind,Node*lhs,Node*rhs)
     node->lhs = lhs;
     node->rhs = rhs;
     node->temp = new_temp();
+    return node;
+}
+static Node *new_unary(NodeKind kind,Node*expr)
+{
+    Node *node = calloc(1, sizeof(Node));
+    node->kind = kind;
+    node->lhs = expr;
     return node;
 }

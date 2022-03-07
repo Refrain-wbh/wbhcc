@@ -11,7 +11,7 @@
 
 typedef enum
 {
-    TK_RESERVED, // punctuators
+    TK_RESERVED, // punctuators or key words
     TK_NUM,   // Integer literals
     TK_EOF,   // End-of-file markers
 } TokenKind;
@@ -42,7 +42,8 @@ typedef enum
     NK_NE,      // !=
     NK_LT,      // <  ### > ==> <
     NK_LE,      // <=
-    
+    NK_RETURN,  // "return"
+
 } NodeKind;
 /*************sym table*****************/ 
 typedef struct Temp Temp;
@@ -101,6 +102,7 @@ typedef enum
     QK_NE,      // !=
     QK_LT,      // <  ### > ==> <
     QK_LE,      // <=
+    QK_RETURN,  // "return"
 } QuadKind;
 typedef struct Quad Quad;
 struct Quad
