@@ -8,6 +8,7 @@ static Node *new_binary();
 Node *expr();
 static Node *primary();
 static Node *mul();
+static Node * unary();
 
 //expr:=mul("+" mul | "-" mul)*
 Node *expr()
@@ -23,19 +24,31 @@ Node *expr()
             return node;
     }
 }
-//mul:=primary("*" primary | "/" primary)*
+
+// mul = unary ("*" unary | "/" unary)*
 Node * mul()
 {
-    Node *node = primary();
+    Node *node = unary();
     while(1)
     {
         if(consume('*'))
-            node = new_binary(NK_MUL, node, primary());
+            node = new_binary(NK_MUL, node, unary());
         else if(consume('/'))
-            node = new_binary(NK_DIV, node, primary());
+            node = new_binary(NK_DIV, node, unary());
         else
             return node;
     }
+}
+
+// unary = ("+" | "-")? unary
+//       | primary
+static Node*unary()
+{
+    if(consume('+'))
+        return unary();
+    if(consume('-'))
+        return new_binary(NK_SUB, new_num(0), unary());
+    return primary();
 }
 //primary:=num | "(" expr ")"
 Node * primary()
