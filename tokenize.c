@@ -34,20 +34,26 @@ int expect_num()
     curtoken = curtoken->next;
     return val;
 }
-void expect(char op)
+void expect(char *op)
 {
-    if(curtoken->kind!=TK_PUNCT || curtoken->str[0]!=op)
-        error_at(curtoken->str,"expect '%c'",op);
+    if(curtoken->kind!=TK_RESERVED || strlen(op)!=curtoken->strlen ||
+            strncmp(curtoken->str,op,curtoken->strlen))
+        error_at(curtoken->str,"expect \"%s\"",op);
     curtoken = curtoken->next;
 }
-bool consume(char op)
+bool consume(char *op)
 {
-    if(curtoken->kind!=TK_PUNCT||*curtoken->str!=op)
+    if(curtoken->kind!=TK_RESERVED|| strlen(op)!=curtoken->strlen ||   
+                strncmp(curtoken->str,op,curtoken->strlen))
         return false;
     curtoken = curtoken->next;
     return true;
 }
-
+//åˆ¤æ–­pæ˜¯å¦æ˜¯ä»¥qä¸ºå¼€å§‹
+bool startwith(char * p,char * q)
+{
+    return strncmp(p, q, strlen(q)) == 0;
+}
 Token* new_token(TokenKind kind,Token* cur,char * str , int strlen)
 {
     Token *newtoken = calloc(1, sizeof(Token));
@@ -62,12 +68,20 @@ Token *tokenize()
     Token head;
     Token *cur = &head;
     char *p = user_input;
-    //½ÓÏÂÀ´½«input½âÎö³ÉÎªÒ»ÏµÁÐµÄtoken
+    //æŽ¥ä¸‹æ¥å°†inputè§£æžæˆä¸ºä¸€ç³»åˆ—çš„token
     while(*p)
     {
         if(isspace(*p))
         {
             p++;
+        }
+        else if(startwith(p,"==") || //two char punct
+                startwith(p,"!=") ||
+                startwith(p,">=") ||
+                startwith(p,"<="))
+        {
+            cur = new_token(TK_RESERVED, cur, p, 2);
+            p += 2;
         }
         else if(isdigit(*p))
         {
@@ -76,9 +90,9 @@ Token *tokenize()
             cur->val = strtol(p, &p, 10);
             cur->strlen = p - q;
         }
-        else if(ispunct(*p))
+        else if(ispunct(*p)) //single char punct
         {
-            cur = new_token(TK_PUNCT, cur, p, 1);
+            cur = new_token(TK_RESERVED, cur, p, 1);
             p++;
         }
         else 

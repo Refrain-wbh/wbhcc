@@ -5,7 +5,7 @@
 typedef enum
 {
     RS_NULL,
-    RS_NOTUSE, //±íÊ¾¼Ä´æÆ÷²»ÄÜÊ¹ÓÃ£¬ÀıÈçÒª±£ÁôÒ»¸ö¼Ä´æÆ÷ÒÔ±¸ºóÓÃµÄÊ±ºò¿ÉÒÔÉèÖÃÕâ¸ö±êÖ¾
+    RS_NOTUSE, //è¡¨ç¤ºå¯„å­˜å™¨ä¸èƒ½ä½¿ç”¨ï¼Œä¾‹å¦‚è¦ä¿ç•™ä¸€ä¸ªå¯„å­˜å™¨ä»¥å¤‡åç”¨çš„æ—¶å€™å¯ä»¥è®¾ç½®è¿™ä¸ªæ ‡å¿—
     RS_CONST,
     RS_TMP,
     RS_VAL, // if content is num
@@ -42,36 +42,10 @@ static Rvalue rvalue[sizeof(regname) / sizeof(regname[0])];
 
 
 
-//Ä¿Ç°²ÉÓÃLRUÀ´¹ÜÀí¼Ä´æÆ÷¡£
-//¸ù¾İÒ»¸öÓĞ¹ØÔËËãµÄËÄÔªÊ½£¬¸ù¾İÕâ¸öËÄÔªÊ½·ÖÅä¼Ä´æÆ÷
-//Òª×¢Òâµ½£¬op x,y ÖĞx»á±»ĞŞ¸Ä£¬²¢×÷Îªz(z=x op y)
+//ç›®å‰é‡‡ç”¨LRUæ¥ç®¡ç†å¯„å­˜å™¨ã€‚
+//æ ¹æ®ä¸€ä¸ªæœ‰å…³è¿ç®—çš„å››å…ƒå¼ï¼Œæ ¹æ®è¿™ä¸ªå››å…ƒå¼åˆ†é…å¯„å­˜å™¨
+//è¦æ³¨æ„åˆ°ï¼Œop x,y ä¸­xä¼šè¢«ä¿®æ”¹ï¼Œå¹¶ä½œä¸ºz(z=x op y)
 
-/*
-char* getReg(Quad*quad)
-{
-
-    // ¼Ù¶¨ z:=x op y ÈôxÔÚriÖĞ£¬²¢ÇÒzºÍxÊÇÍ¬Ò»¸ö·ûºÅ£¬ÔòÑ¡¶¨riÎª¼Ä´æÆ÷
-    char *xreg = get_reg(quad->arg1), *zreg = get_reg(quad->result);
-    if(xreg!=NULL&&xreg==zreg)
-        return xreg;
-    //Èç¹ûÓĞÃ»ÓĞ·ÖÅäµÄ¼Ä´æÆ÷£¬ÔòÑ¡ÔñÒ»¸öri×÷Îª½á¹û
-    int emptyreg = -1;
-    for (int i = 0; i < regnum; ++i)
-        if(rvalue[i].kind==RK_NULL)
-        {
-            emptyreg = i;
-            break;
-        }
-    if(emptyreg!=-1)
-        return regname + emptyreg;
-    //Èç¹ûÃ»ÓĞ¿ÕÏĞµÄ¼Ä´æÆ÷£¬Ôò°´ÕÕLRUµÄ·½Ê½À´Ñ¡Ôñ¼Ä´æÆ÷ri
-
-    //¶ÔÓÚÕâ¸öriÖĞµÄ±äÁ¿£¬Èç¹û²»ÊÇA£¬»òÕß£¨MÊÇAºÍC£¬µ«²»ÊÇBÇÒB²»ÔÚriÖĞ£©
-    static chose = 0;
-    chose = (chose + 1) % regnum;
-
-}
-*/
 
 static int regidx(char *name)
 {
@@ -89,14 +63,14 @@ static int get_reg(Node*node)
         regstate = node->temp->reg;
     return regstate;
 }
-//ÅĞ¶ÏÒ»¸ö½ÚµãÊÇ·ñÔÚ¼Ä´æÆ÷ÖĞ
+//åˆ¤æ–­ä¸€ä¸ªèŠ‚ç‚¹æ˜¯å¦åœ¨å¯„å­˜å™¨ä¸­
 static bool inreg(Node * node)
 {
     return get_reg(node) != 0;
 }
 
 
-//Çå¿Õreg£¬ÒÔ¼°¶ÔÓ¦µÄ±äÁ¿³£Á¿µÈ±í
+//æ¸…ç©ºregï¼Œä»¥åŠå¯¹åº”çš„å˜é‡å¸¸é‡ç­‰è¡¨
 static void clear_reg(int reg)
 {
     if(rvalue[reg].kind==RS_TMP)
@@ -106,7 +80,7 @@ static void clear_reg(int reg)
 
     rvalue[reg].kind = RS_NULL;
 }
-//½«¼Ä´æÆ÷ÖĞµÄÄÚÈİ´æ´¢µ½ÄÚ´æ£¬Éú³É¶ÔÓ¦Ö¸Áî£¬×¢Òâ²»»áÇå¿Õreg£¬µ«»áÉèÖÃinmemory
+//å°†å¯„å­˜å™¨ä¸­çš„å†…å®¹å­˜å‚¨åˆ°å†…å­˜ï¼Œç”Ÿæˆå¯¹åº”æŒ‡ä»¤ï¼Œæ³¨æ„ä¸ä¼šæ¸…ç©ºregï¼Œä½†ä¼šè®¾ç½®inmemory
 static void store(int reg)
 {
     if(rvalue[reg].kind==RS_TMP)
@@ -117,7 +91,7 @@ static void store(int reg)
         rvalue[reg].temp->inmemory = 1;
     }
 }
-//ÉèÖÃregÒÔ¼°¶ÔÓ¦µÄ±äÁ¿³£Á¿µÈ±í
+//è®¾ç½®regä»¥åŠå¯¹åº”çš„å˜é‡å¸¸é‡ç­‰è¡¨
 static void set_reg(Node*node,int reg)
 {
     clear_reg(reg);
@@ -134,7 +108,7 @@ static void set_reg(Node*node,int reg)
         node->temp->reg = reg;
     }
 }
-//½«ÄÚÈİ´Ó´æ´¢Æ÷ÖĞ¶ÁÈëµ½regÖĞ
+//å°†å†…å®¹ä»å­˜å‚¨å™¨ä¸­è¯»å…¥åˆ°regä¸­
 static void load(Node*node,int reg)
 {
     if(node->kind==NK_NUM)
@@ -148,7 +122,7 @@ static void load(Node*node,int reg)
         print(",%s\n", regname[reg]);
     }
 }
-//·ÖÅäÒ»¸ö¼Ä´æÆ÷£¬Èç¹û¼Ä´æÆ÷²»¿ÕÏĞÔò»¹ĞèÒªÇå¿Õ¼Ä´æÆ÷
+//åˆ†é…ä¸€ä¸ªå¯„å­˜å™¨ï¼Œå¦‚æœå¯„å­˜å™¨ä¸ç©ºé—²åˆ™è¿˜éœ€è¦æ¸…ç©ºå¯„å­˜å™¨
 static int alloc_reg()
 {
     for (int i = 1; i < regnum;++i)
@@ -169,33 +143,32 @@ static int alloc_reg()
     clear_reg(idx);
     return idx;
 }
-
 /*
  * 
 
-    Ó¦¸ÃÒª¿¼ÂÇÒ»ÏÂÒ»¸öÍ³Ò»µÄ·½·¨ z=x op y  ·ÖÎªÈıÀà£¬±äÁ¿±í£¬ÁÙÊ±±äÁ¿±íºÍ³£Á¿±í
-    ÒòÎªÒª²úÉúÕâÑùµÄ¼ÆËãÊ½×Ó£¬ÎªÁË·ÀÖ¹xºÍyÖ®¼ä³åÍ»£¬ËùÒÔÓ¦¸ÃÔÚÒ»¸öº¯ÊıÄÚÍê³ÉxyµÄ¼Ä´æÆ÷ÅäÖÃ
+    åº”è¯¥è¦è€ƒè™‘ä¸€ä¸‹ä¸€ä¸ªç»Ÿä¸€çš„æ–¹æ³• z=x op y  åˆ†ä¸ºä¸‰ç±»ï¼Œå˜é‡è¡¨ï¼Œä¸´æ—¶å˜é‡è¡¨å’Œå¸¸é‡è¡¨
+    å› ä¸ºè¦äº§ç”Ÿè¿™æ ·çš„è®¡ç®—å¼å­ï¼Œä¸ºäº†é˜²æ­¢xå’Œyä¹‹é—´å†²çªï¼Œæ‰€ä»¥åº”è¯¥åœ¨ä¸€ä¸ªå‡½æ•°å†…å®Œæˆxyçš„å¯„å­˜å™¨é…ç½®
 
-    Ê×ÏÈÊÇ·ÖÅä¼Ä´æÆ÷£¬Ê×ÏÈ¿¼ÂÇxÔÚ¼Ä´æÆ÷ÖĞ£º£¨Ôò¿¼ÂÇÊ¹ÓÃ¸Ã¼Ä´æÆ÷£©
-        Èç¹ûxÊÇ³£Á¿£¬ÔòÖ±½Ó·ÖÅä
-        Èç¹ûxÊÇÁÙÊ±±äÁ¿£¬ÒòÎªÎÒÃÇ±£Ö¤ÁËÁÙÊ±±äÁ¿Ö»Ê¹ÓÃºÍ¶¨ÒåÒ»´Î£¬ËùÒÔ±ØÈ»¿ÉÒÔÖ±½Ó·ÖÅä
-        Èç¹ûxÊÇ±äÁ¿£¬Ôò¿¼ÂÇÊÇ·ñÓëzÏàÍ¬£¬Èç¹ûÏàÍ¬£¬ÔòÖ±½Ó·ÖÅä£¬·ñÔòĞèÒªÉú³É±£´æÖ¸Áî(Ò²²»ĞèÒª¿¼ÂÇ)
-    xÈç¹û²»ÔÚ¼Ä´æÆ÷ÖĞ£¬ÔòĞèÒªÈ¥ÈÎÒâ·ÖÅä¼Ä´æÆ÷
+    é¦–å…ˆæ˜¯åˆ†é…å¯„å­˜å™¨ï¼Œé¦–å…ˆè€ƒè™‘xåœ¨å¯„å­˜å™¨ä¸­ï¼šï¼ˆåˆ™è€ƒè™‘ä½¿ç”¨è¯¥å¯„å­˜å™¨ï¼‰
+        å¦‚æœxæ˜¯å¸¸é‡ï¼Œåˆ™ç›´æ¥åˆ†é…
+        å¦‚æœxæ˜¯ä¸´æ—¶å˜é‡ï¼Œå› ä¸ºæˆ‘ä»¬ä¿è¯äº†ä¸´æ—¶å˜é‡åªä½¿ç”¨å’Œå®šä¹‰ä¸€æ¬¡ï¼Œæ‰€ä»¥å¿…ç„¶å¯ä»¥ç›´æ¥åˆ†é…
+        å¦‚æœxæ˜¯å˜é‡ï¼Œåˆ™è€ƒè™‘æ˜¯å¦ä¸zç›¸åŒï¼Œå¦‚æœç›¸åŒï¼Œåˆ™ç›´æ¥åˆ†é…ï¼Œå¦åˆ™éœ€è¦ç”Ÿæˆä¿å­˜æŒ‡ä»¤(ä¹Ÿä¸éœ€è¦è€ƒè™‘)
+    xå¦‚æœä¸åœ¨å¯„å­˜å™¨ä¸­ï¼Œåˆ™éœ€è¦å»ä»»æ„åˆ†é…å¯„å­˜å™¨
 
-    ÎªxÈÎÒâ·ÖÅäÒ»¸ö¼Ä´æÆ÷µÄ¹æÔò£º
-    £¨×¢ÒâZ±ØÈ»µÄÊÇÒ»¸öÎ´±»·ÖÅäµÄ£¬ÒòÎª¿¼ÂÇ³éÏóÓï·¨Ê÷£¬Z±ØÈ»²»ÊÇÒ¶×Ó½Úµã£¬
-    ËùÒÔÊÇÁÙÊ±½Úµã£¬²¢ÇÒ¸Ã¾äÎª¶¨Òå£¬ËùÒÔ¾Í±ØÈ»´ËÇ°Î´±»·ÖÅä¹ı£©
-    Èç¹ûÓĞ¿Õ¼Ä´æÆ÷ÔòÖ±½Ó·ÖÅä
-    Èç¹û¶¼ÂúÁË£¬ÔòÊ×ÏÈ·ÖÅä´æ´¢³£Á¿µÄ¼Ä´æÆ÷£¬²¢ÇÒ²»ĞèÒªÉú³É±£´æ³£Á¿µÄÓï¾ä
-    ·ñÔòÔòËæ»úÑ¡ÔñÒ»¸öÌæ»»³öÈ¥£¬²¢Éú³É±£´æÓï¾ä¡£
+    ä¸ºxä»»æ„åˆ†é…ä¸€ä¸ªå¯„å­˜å™¨çš„è§„åˆ™ï¼š
+    ï¼ˆæ³¨æ„Zå¿…ç„¶çš„æ˜¯ä¸€ä¸ªæœªè¢«åˆ†é…çš„ï¼Œå› ä¸ºè€ƒè™‘æŠ½è±¡è¯­æ³•æ ‘ï¼ŒZå¿…ç„¶ä¸æ˜¯å¶å­èŠ‚ç‚¹ï¼Œ
+    æ‰€ä»¥æ˜¯ä¸´æ—¶èŠ‚ç‚¹ï¼Œå¹¶ä¸”è¯¥å¥ä¸ºå®šä¹‰ï¼Œæ‰€ä»¥å°±å¿…ç„¶æ­¤å‰æœªè¢«åˆ†é…è¿‡ï¼‰
+    å¦‚æœæœ‰ç©ºå¯„å­˜å™¨åˆ™ç›´æ¥åˆ†é…
+    å¦‚æœéƒ½æ»¡äº†ï¼Œåˆ™é¦–å…ˆåˆ†é…å­˜å‚¨å¸¸é‡çš„å¯„å­˜å™¨ï¼Œå¹¶ä¸”ä¸éœ€è¦ç”Ÿæˆä¿å­˜å¸¸é‡çš„è¯­å¥
+    å¦åˆ™åˆ™éšæœºé€‰æ‹©ä¸€ä¸ªæ›¿æ¢å‡ºå»ï¼Œå¹¶ç”Ÿæˆä¿å­˜è¯­å¥ã€‚
 
-    È»ºóÉú³ÉyµÄ¼Ä´æÆ÷£¬Èç¹ûyÔÚ¼Ä´æÆ÷ÖĞÔòÍòÊÂ´ó¼ª¡£
-    Èç¹û²»ÔÚ£¬Ôò·ÖÅäÒ»¸ö¼Ä´æÆ÷£¬×¢Òâ²»ÒªÓëxÆğ³åÍ»£¬Éú³É·½Ê½ºÍxÏàÍ¬¡£
+    ç„¶åç”Ÿæˆyçš„å¯„å­˜å™¨ï¼Œå¦‚æœyåœ¨å¯„å­˜å™¨ä¸­åˆ™ä¸‡äº‹å¤§å‰ã€‚
+    å¦‚æœä¸åœ¨ï¼Œåˆ™åˆ†é…ä¸€ä¸ªå¯„å­˜å™¨ï¼Œæ³¨æ„ä¸è¦ä¸xèµ·å†²çªï¼Œç”Ÿæˆæ–¹å¼å’Œxç›¸åŒã€‚
 
 
  * 
  */
-//Éú³É2²Ù×÷ÊıµÄÔËËã´úÂë
+//ç”Ÿæˆ2æ“ä½œæ•°çš„è¿ç®—ä»£ç 
 void gen_2operate_code(Quad*quad)
 {
 
@@ -237,9 +210,65 @@ void gen_2operate_code(Quad*quad)
         break;
     }
 }
-//ÓÉÓÚ³ı·¨Ö¸ÁîĞèÒª±£Ö¤[edx;eax]Îª±»³ıÊı£¬ËùÒÔÃ»ÓĞºÍÉÏÎÄÍ³Ò»¸ñÊ½£¬Òò¶øµ¥¶ÀÉú³É
-// [edx;eax] / y  -> ÉÌ£º%eax  ÓàÊı£º %edx
-//ËùÒÔÕâÀï»á½øĞĞÒ»ÏµÁĞÕû³ıºÍÉÌµÄÔËËã
+
+//å°†æ¯”è¾ƒç»“æœç»Ÿä¸€æ”¾åœ¨eaxä¸­,å› æ­¤éœ€è¦å¯¹eaxè¿›è¡Œæ¸…ç©ºå¤„ç†ç­‰
+void gen_cmp_code(Quad*quad)
+{
+    const int eax = 1;
+#ifdef DEBUG
+    assert(strcmp(regname[eax], "%eax") == 0);
+#endif
+    int regx = 0,regy;
+    if (!inreg(quad->arg1))
+    {
+        regx = alloc_reg();
+        rvalue[regx].kind = RS_NOTUSE;
+    }
+    if(!inreg(quad->arg2))
+    {
+        regy = alloc_reg();
+        set_reg(quad->arg2, regy);
+        load(quad->arg2, regy);
+    }
+    if(regx)
+    {
+        set_reg(quad->arg1, regx);
+        load(quad->arg1, regx);
+    }
+
+    //from now  x y reg is set sucess
+    regx = get_reg(quad->arg1), regy = get_reg(quad->arg2);
+    print("\tcmpl %s,%s\n", regname[regy],regname[regx]);
+    
+    //ç„¶åæ¸…ç©ºeaxï¼Œä¸ºç»“æœç•™ä¸‹ç©ºé—´
+    store(eax);
+    clear_reg(eax);
+    set_reg(quad->result, eax);
+
+    switch (quad->op)
+    {
+    case QK_EQ:
+        print("\tsete %%al\n");
+        break;
+    case QK_NE:
+        print("\tsetne %%al\n");
+        break;
+    case QK_LE:
+        print("\tsetle %%al\n");
+        break;
+    case QK_LT:
+        print("\tsetl %%al\n");
+        break;
+    default:
+        break;
+    }
+    print("\tmovzbl %%al,%%eax\n");
+
+}
+
+//ç”±äºé™¤æ³•æŒ‡ä»¤éœ€è¦ä¿è¯[edx;eax]ä¸ºè¢«é™¤æ•°ï¼Œæ‰€ä»¥æ²¡æœ‰å’Œä¸Šæ–‡ç»Ÿä¸€æ ¼å¼ï¼Œå› è€Œå•ç‹¬ç”Ÿæˆ
+// [edx;eax] / y  -> å•†ï¼š%eax  ä½™æ•°ï¼š %edx
+//æ‰€ä»¥è¿™é‡Œä¼šè¿›è¡Œä¸€ç³»åˆ—æ•´é™¤å’Œå•†çš„è¿ç®—
 void gen_div_code(Quad*quad)
 {
     const int edx = 4, eax = 1;
@@ -247,7 +276,7 @@ void gen_div_code(Quad*quad)
     assert(strcmp(regname[edx], "%edx") == 0);
     assert(strcmp(regname[eax], "%eax") == 0);
 #endif
-    //Ê×ÏÈÇå¿Õedx
+    //é¦–å…ˆæ¸…ç©ºedxï¼Œå¹¶ç”Ÿæˆç›¸åº”çš„ä¿å­˜è¯­å¥
     if(rvalue[edx].kind!=RS_NULL)
     {
         store(edx);
@@ -255,6 +284,8 @@ void gen_div_code(Quad*quad)
     }
     rvalue[edx].kind = RS_NOTUSE;
 
+    //ç„¶åè·å–arg1çš„regï¼Œå¦‚æœä¸æ˜¯eaxï¼Œé‚£ä¹ˆå°±è¦å…ˆä¿å­˜eaxï¼Œç„¶åå°†å¥¥arg1åŠ è½½åˆ°eaxä¸­
+    //æ³¨æ„divä¼šè®©eaxå‘ç”Ÿæ”¹å˜ï¼Œä½†ç”±äºä¸´æ—¶å˜é‡ä¸€æ¬¡å®šä¹‰ä¸€æ¬¡ä½¿ç”¨ï¼Œæ‰€ä»¥æ— éœ€æ‹…å¿ƒ
     int xreg = get_reg(quad->arg1);
     if(xreg!=eax)
     {
@@ -274,7 +305,7 @@ void gen_div_code(Quad*quad)
         }
     }
 
-    //¼ÓÔØy
+    //åŠ è½½y
     if(!inreg(quad->arg2))
     {
         RvalKind tmpkind = rvalue[eax].kind;
@@ -292,41 +323,9 @@ void gen_div_code(Quad*quad)
 
     if(quad->op==QK_DIV)
         set_reg(quad->result, eax);
-    
-
 }
-//
 
-//if value is in reg then just return 
-//else chose a reg and load
 
-/*
-char * load(Node* node)
-{
-    if(node->kind==NK_NUM)
-    {
-        char * reg=get_reg();
-        rvalue[regidx(reg)].kind = RS_VAL;
-        rvalue[regidx(reg)].val = node->val;
-
-        print("\tmovl %s,%d\n", reg, node->val);
-        return reg;
-    }
-    else//when contain temp
-    {
-        if(node->temp->reg)
-            return node->temp->reg;
-        else{
-            char *reg = get_reg();
-            rvalue[regidx(reg)].kind = RS_TMP;
-            rvalue[regidx(reg)].temp = node->temp;
-            node->temp->reg = reg;
-            return reg;
-        }
-            
-    }
-}
-*/
 void gen_code()
 {
 
@@ -338,8 +337,8 @@ void gen_code()
         Quad *quad = &quadset->list[i];
         switch (quad->op)
         {
-        //¶ÔÓÚ¶şÔª²Ù×÷z:=x op y ÓÉÓÚÒ»´Î¶¨ÒåÒ»´ÎÒıÓÃ£¬ËùÒÔxÈç¹ûÔÚregÖĞÔò¿ÉÒÔ×÷ÎªzµÄ±£´æ
-        //Èç¹ûÔÚÄÚ´æÖĞ£¬ÔòĞèÒªÒ»´Î¼ÓÔØ£¬Õâ¸öÊ±ºò·ÖÅäÒ»¸ö¼Ä´æÆ÷¼´¿É¡£
+        //å¯¹äºäºŒå…ƒæ“ä½œz:=x op y ç”±äºä¸€æ¬¡å®šä¹‰ä¸€æ¬¡å¼•ç”¨ï¼Œæ‰€ä»¥xå¦‚æœåœ¨regä¸­åˆ™å¯ä»¥ä½œä¸ºzçš„ä¿å­˜
+        //å¦‚æœåœ¨å†…å­˜ä¸­ï¼Œåˆ™éœ€è¦ä¸€æ¬¡åŠ è½½ï¼Œè¿™ä¸ªæ—¶å€™åˆ†é…ä¸€ä¸ªå¯„å­˜å™¨å³å¯ã€‚
         case QK_ADD:
         case QK_SUB:
         case QK_MUL:
@@ -347,6 +346,13 @@ void gen_code()
             break;
         case QK_DIV:
             gen_div_code(quad);
+            break;
+        //for cmp oper
+        case QK_LE:
+        case QK_EQ:
+        case QK_LT:
+        case QK_NE:
+            gen_cmp_code(quad);
             break;
         default:
             break;

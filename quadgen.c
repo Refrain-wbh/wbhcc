@@ -44,6 +44,18 @@ static int gen_operation(NodeKind kind,Node*arg1,Node*arg2,Node*result)
     case NK_MUL:
         cur->op = QK_MUL;
         break;
+    case NK_LE:
+        cur->op = QK_LE;
+        break;
+    case NK_EQ:
+        cur->op = QK_EQ;
+        break;
+    case NK_NE:
+        cur->op = QK_NE;
+        break;
+    case NK_LT:
+        cur->op = QK_LT;
+        break;
     default:
         break;
     }
@@ -57,11 +69,15 @@ void gen_quadset(Node*ASTroot)
     case NK_SUB:
     case NK_DIV:
     case NK_MUL:
+    case NK_LE:
+    case NK_EQ:
+    case NK_NE:
+    case NK_LT:
         gen_quadset(ASTroot->lhs);
         gen_quadset(ASTroot->rhs);
         gen_operation(ASTroot->kind, ASTroot->lhs, ASTroot->rhs, ASTroot);
         break;
-    default:
+        default:
         break;
     }
 }

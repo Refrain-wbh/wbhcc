@@ -11,7 +11,7 @@
 
 typedef enum
 {
-    TK_PUNCT, // punctuators
+    TK_RESERVED, // punctuators
     TK_NUM,   // Integer literals
     TK_EOF,   // End-of-file markers
 } TokenKind;
@@ -23,8 +23,8 @@ struct Token
     TokenKind kind; // Token kind
     Token *next;    // Next token
     int val;       // If kind is TK_NUM, its value
-    char *str;      //token¶ÔÓ¦µÄ×Ö·û´®
-    int strlen;     //ÏŞÖÆstrµÄ³¤¶È
+    char *str;      //tokenå¯¹åº”çš„å­—ç¬¦ä¸²
+    int strlen;     //é™åˆ¶strçš„é•¿åº¦
 };
 
 
@@ -38,6 +38,10 @@ typedef enum
     NK_NUM,     //  integer
     NK_DIV,     //  /
     NK_MUL,     //  *
+    NK_EQ,      // ==
+    NK_NE,      // !=
+    NK_LT,      // <  ### > ==> <
+    NK_LE,      // <=
 } NodeKind;
 /*************sym table*****************/ 
 typedef struct Temp Temp;
@@ -91,6 +95,10 @@ typedef enum
     QK_SUB,
     QK_DIV,
     QK_MUL,
+    QK_EQ,      // ==
+    QK_NE,      // !=
+    QK_LT,      // <  ### > ==> <
+    QK_LE,      // <=
 } QuadKind;
 typedef struct Quad Quad;
 struct Quad
@@ -126,9 +134,9 @@ extern QuadSet *quadset;
 
 
 // funtion of tokenize
-bool consume(char op);
+bool consume(char* op);
 int expect_num();
-void expect(char op);
+void expect(char *op);
 Token *tokenize();
 
 //function of symtable
