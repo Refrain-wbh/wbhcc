@@ -148,7 +148,7 @@ static void load(Node *node, int reg)
 //分配一个寄存器，如果寄存器不空闲则还需要清空寄存器
 static int alloc_reg()
 {
-    for (int i = 1; i < regnum; ++i)
+    for (int i = regnum-1; i >=1 ; --i)
     {
         if (rvalue[i].kind == RS_NULL)
             return i;
@@ -165,6 +165,18 @@ static int alloc_reg()
     store(idx);
     clear_reg(idx);
     return idx;
+}
+
+static void store_all_var()
+{
+    for (int i = 1; i < regnum;++i)
+    {
+        if(rvalue[i].kind == RS_LOCAL)
+        {
+            store(i);
+            clear_reg(i);
+        }
+    }
 }
 /*
  *
@@ -295,7 +307,7 @@ void gen_cmp_code(Quad *quad)
     default:
         break;
     }
-    print("\tmovzbl %%al,%%eax\n");
+    print("\tmovsbl %%al,%%eax\n");
 }
 
 //由于除法指令需要保证[edx;eax]为被除数，所以没有和上文统一格式，因而单独生成
@@ -423,6 +435,32 @@ void gen_assign_code(Quad *quad)
         clear_reg(sreg);
 }
 
+void gen_jump_code(Quad*quad)
+{
+
+    switch (quad->op)
+    {
+    case QK_JEZ:
+    {
+        int reg;
+        if(!inreg(quad->arg1))
+        {
+            reg = alloc_reg();
+            load(quad->arg1,reg);
+            set_reg(quad->arg1, reg);
+        }
+        reg = get_reg(quad->arg1);
+        print("\tcmpl $0,%s\n", regname[reg]);
+        print("\tje .L%d\n", quad->label);
+        break;
+    }
+    case QK_JMP:
+        print("\tjmp .L%d\n", quad->label);
+        break;
+    default:
+        break;
+    }
+}
 void gen_code()
 {
 
@@ -460,6 +498,15 @@ void gen_code()
             break;
         case QK_ASSIGN:
             gen_assign_code(quad);
+            break;
+        case QK_JMP:
+        case QK_JEZ:
+            store_all_var();
+            gen_jump_code(quad);
+            break;
+        case QK_LABEL:
+            store_all_var();
+            print(".L%d:\n", quad->label);
             break;
         default:
             break;

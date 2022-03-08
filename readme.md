@@ -5,7 +5,10 @@
 ## 支持的语法
  program := stmt*  
  stmt := expr ";"  
-      | "return" expr ";"
+       |  "if" "(" expr ")" stmt ("else" "stmt")?  
+       |  "while" "(" expr ")" stmt  
+       |  "for" "(" expr? ";" expr? ";" expr? ";" ")"stmt  
+       | "return" expr ";"    
 expr := assign    
 assign:=equality("=" assign)?   //右递归用于构建右结合运算符  
 equality:=relational("==" relational | "!=" relational) *  

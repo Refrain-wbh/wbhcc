@@ -66,6 +66,31 @@ bool startwith(const char * p,const char * q)
 {
     return strncmp(p, q, strlen(q)) == 0;
 }
+
+const char *start_with_reserved(const char *p)
+{ 
+    //关键字识别
+    static const char *keys[] = {"return","if","else","while","for"};
+    static const int keyscount = sizeof(keys)/ sizeof(keys[0]);
+    for (int i = 0; i < keyscount; ++i)
+    {
+        int keylens = strlen(keys[i]);
+        if (startwith(p, keys[i]) && !isalnum(p[keylens]))
+        {
+            return keys[i];
+        }
+    }
+    
+    //多字符分隔
+    static const char *ops[] = {"==", ">=", "<=", "!="};
+    static const int opslens = sizeof(ops) / sizeof(ops[0]);
+    for (int i = 0; i < opslens;++i)
+    {
+        if(startwith(p,ops[i]))
+            return ops[i];
+    }
+    return NULL;
+}
 Token* new_token(TokenKind kind,Token* cur,char * str , int strlen)
 {
     Token *newtoken = calloc(1, sizeof(Token));
@@ -82,8 +107,6 @@ Token *tokenize()
     Token *cur = &head;
     char *p = user_input;
 
-    const char *keys[] = {"return",};
-    const int keyscount = sizeof(keys)/ sizeof(keys[0]);
     //接下来将input解析成为一系列的token
     while(*p)
     {
@@ -93,22 +116,16 @@ Token *tokenize()
             continue;
         }
 
-        
-        //关键字识别
-        unsigned int i;
-        for (i = 0;i<keyscount;++i)
+        //保留字和多字符punct
+        const char *reserved;
+        if((reserved=start_with_reserved(p))!=NULL)
         {
-            int keylens = strlen(keys[i]);
-            if(startwith(p,keys[i]) && !isalnum(p[keylens]))
-            {
-                cur = new_token(TK_RESERVED, cur, p, keylens);
-                p += keylens;
-                break;
-            }
-        }
-        if(i<keyscount)
+            int lens = strlen(reserved);
+            cur = new_token(TK_RESERVED, cur, p, lens);
+            p += lens;
             continue;
-
+        }
+        
         //变量名识别
         if(isalpha(*p))
         {
@@ -119,18 +136,6 @@ Token *tokenize()
             p = q;
             continue;
         }
-
-        if (startwith(p, "==") || // two char punct
-            startwith(p, "!=") ||
-            startwith(p, ">=") ||
-            startwith(p, "<="))
-        {
-            cur = new_token(TK_RESERVED, cur, p, 2);
-            p += 2;
-            continue;
-        }
-
-
         if(isdigit(*p))
         {
             char *q = p;

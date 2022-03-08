@@ -2,6 +2,13 @@
 
 #define print(fmt,...) fprintf(quadout,fmt,## __VA_ARGS__)
 
+
+static int new_label()
+{
+    static int label = 0;
+    return label++;
+}
+
 static void enlarge_capacity()
 {
     int newcap = quadset->capacity!=0 ? quadset->capacity * 2 : 500;
@@ -14,6 +21,8 @@ static void enlarge_capacity()
     quadset->list = newlist;
     quadset->capacity = newcap;
 }
+
+
 
 //使用一种简单的方式计算temp的offset
 //目前来说，四元式的arg1 arg2是使用处，result为定义处，return中的arg1是expr
@@ -40,15 +49,40 @@ static int calc_temp_offset()
     }
 }
 
+
+static int gen_jump(QuadKind kind,Node*arg1,Node*arg2,int label)
+{
+    int idx = quadset->size;
+    if(idx>=quadset->capacity)
+        enlarge_capacity();
+    
+    quadset->size++;
+
+    quadset->list[idx].arg1 = arg1;
+    quadset->list[idx].arg2 = arg2;
+    quadset->list[idx].op = kind;
+    quadset->list[idx].label = label;
+}
+static int gen_label(int label)
+{
+    int idx = quadset->size;
+    if(idx>=quadset->capacity)
+        enlarge_capacity();
+    
+    quadset->size++;
+
+    quadset->list[idx].op = QK_LABEL;
+    quadset->list[idx].label = label;
+}
 //operation,so must have a result (temp var) in result-node
 static int gen_operation(NodeKind kind,Node*arg1,Node*arg2,Node*result)
 {
     int idx = quadset->size;
     if(idx>=quadset->capacity)
-    {
         enlarge_capacity();
-    }
+    
     quadset->size++;
+
     quadset->list[idx].arg1 = arg1;
     quadset->list[idx].arg2 = arg2;
     quadset->list[idx].result = result;
@@ -119,6 +153,59 @@ void gen_quadcode(Node *ASTroot)
             gen_quadcode(ASTroot->rhs);
             gen_operation(ASTroot->kind, ASTroot->rhs, NULL, ASTroot->lhs);
             break;
+        case NK_IF:
+            if(ASTroot->els)
+            {
+                int else_label = new_label(),end_label=new_label();
+                gen_quadcode(ASTroot->cond);
+                gen_jump(QK_JEZ, ASTroot->cond, NULL, else_label);
+                gen_quadcode(ASTroot->then);
+                gen_jump(QK_JMP, NULL, NULL, end_label);
+                gen_label(else_label);
+                gen_quadcode(ASTroot->els);
+                gen_label(end_label);
+            }
+            else 
+            {
+                int end_label = new_label();
+                gen_quadcode(ASTroot->cond);
+                gen_jump(QK_JEZ, ASTroot->cond, NULL, end_label);
+                gen_quadcode(ASTroot->then);
+                gen_label(end_label);
+            }
+            break;
+        case NK_WHILE:
+        {
+            int begin_label = new_label(), end_label = new_label();
+            gen_label(begin_label);
+            gen_quadcode(ASTroot->cond);
+            gen_jump(QK_JEZ, ASTroot->cond, NULL, end_label);
+            gen_quadcode(ASTroot->then);
+            gen_jump(QK_JMP, NULL, NULL, begin_label);
+            gen_label(end_label);
+
+            break;
+        }
+        case NK_FOR:
+        {
+            if(ASTroot->init)
+                gen_quadcode(ASTroot->init);
+            int begin_label = new_label(), end_label = new_label();
+            gen_label(begin_label);
+
+            if(ASTroot->cond)
+            {
+                gen_quadcode(ASTroot->cond);
+                gen_jump(QK_JEZ, ASTroot->cond, NULL, end_label);
+            }
+            gen_quadcode(ASTroot->then);
+            if(ASTroot->inc)
+                gen_quadcode(ASTroot->inc);
+            gen_jump(QK_JMP, NULL, NULL, begin_label);
+            gen_label(end_label);
+
+            break;
+        }
         default:
             break;
         }

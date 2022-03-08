@@ -46,6 +46,9 @@ typedef enum
     NK_RETURN,  // "return"
     NK_IDENT,   // id
     NK_ASSIGN,  // =
+    NK_IF,      //if
+    NK_WHILE,   //while
+    NK_FOR,     //for
 
 } NodeKind;
 /*************sym table*****************/
@@ -92,6 +95,15 @@ struct Node
     ConstVal * constval;       //used if kind == ND_NUM
     Temp *temp;     //used if kind is a operator
     Var *var;
+
+    //if  and while state
+    Node *cond;
+    Node * then;
+    Node *els;
+
+    //for state (add)
+    Node * init;
+    Node *inc;
 };
 
 typedef struct Function Function;
@@ -116,6 +128,9 @@ typedef enum
     QK_LE,      // <=
     QK_RETURN,  // "return"
     QK_ASSIGN,  // =
+    QK_JEZ,     //如果等于0则跳转
+    QK_JMP,     //无条件跳转
+    QK_LABEL,   //跳转标志
 } QuadKind;
 typedef struct Quad Quad;
 struct Quad
@@ -124,6 +139,7 @@ struct Quad
     Node *arg1;
     Node *arg2;
     Node *result;
+    int label;
 };
 //mid code set
 typedef struct QuadSet QuadSet;

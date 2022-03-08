@@ -50,6 +50,9 @@ Function *program()
     return func;
 }
 //  stmt := expr ";"
+//       |  "if" "(" expr ")" stmt ("else" "stmt")?
+//       |  "while" "(" expr ")" stmt
+//       |  "for" "(" expr? ";" expr? ";" expr? ";" ")"stmt
 //       | "return" expr ";"
 static Node*stmt()
 {
@@ -57,6 +60,48 @@ static Node*stmt()
     {
         Node *node = new_unary(NK_RETURN, expr());
         expect(";");
+        return node;
+    }
+    if(consume("if"))
+    {
+        Node *node = new_node(NK_IF);
+        expect("(");
+        node->cond = expr();
+        expect(")");
+        node->then = stmt();
+        if(consume("else"))
+            node->els = stmt();
+        return node;
+    }
+    if(consume("while"))
+    {
+        Node *node = new_node(NK_WHILE);
+        expect("(");
+        node->cond = expr();
+        expect(")");
+        node->then = stmt();
+        return node;
+    }
+    if(consume("for"))
+    {
+        Node *node = new_node(NK_FOR);
+        expect("(");
+        if (!consume(";"))
+        {
+            node->init = expr();
+            expect(";");
+        }
+        if (!consume(";"))
+        {
+            node->cond = expr();
+            expect(";");
+        }
+        if(!consume(")"))
+        {
+            node->inc = expr();
+            expect(")");
+        }
+        node->then = stmt();
         return node;
     }
     Node *node = expr();
