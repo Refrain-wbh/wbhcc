@@ -1,24 +1,40 @@
 #include"wcc.h"
 
+static Var *local;
+static int local_offset;
+static Temp *temp;
+static ConstVal *constval;
+
 /*####################parse##################*/
+static char *strndup(const char *str, int len);
+
+static Var *find_var(Token *tok);
+static Var *new_ivar(char *name);
+
+static Node *new_node(NodeKind kind);
 static Node *new_num(long val);
 static Node *new_binary(NodeKind kind, Node *lhs, Node *rhs);
 static Node *new_unary(NodeKind kind,Node*expr);
+static Node *new_ident(Var *var);
 
-Node *program();
+Function *program();
 static Node *stmt();
 static Node *expr();
-static Node *primary();
-static Node *mul();
-static Node * unary();
+static Node *assign();
 static Node *equality();
 static Node *relational();
+static Node *mul();
+static Node * unary();
 static Node *add();
+static Node *primary();
 
 
-// program = stmt*
-Node *program()
+// program := stmt*
+Function *program()
 {
+    local = NULL;
+    temp = NULL;
+    local_offset = 0;
     Node head = {};
     Node *cur = &head;
     while(!at_eof())
@@ -26,10 +42,15 @@ Node *program()
         cur->next = stmt();
         cur = cur->next;
     }
-    return head.next;
+    Function *func = calloc(1, sizeof(Function));
+    func->node = head.next;
+    func->local = local;
+    func->temp = temp;
+    func->local_size = local_offset;
+    return func;
 }
-// stmt = expr ";"
-//      | "return" expr ";"
+//  stmt := expr ";"
+//       | "return" expr ";"
 static Node*stmt()
 {
     if(consume("return"))
@@ -42,10 +63,19 @@ static Node*stmt()
     expect(";");
     return node;
 }
-//expr:=equality
-static Node*expr()
+
+// expr := assign
+static Node * expr()
 {
-    return equality();
+    return assign();
+}
+// assign := equality ("=" assign)?
+static Node * assign()
+{
+    Node *node = equality();
+    if(consume("="))
+        return new_binary(NK_ASSIGN, node, assign());
+    return node;
 }
 
 //equality:=relational("==" relational | "!=" relational) *
@@ -96,7 +126,7 @@ static Node *add()
     }
 }
 
-// mul = unary ("*" unary | "/" unary)*
+// mul := unary ("*" unary | "/" unary)*
 static Node * mul()
 {
     Node *node = unary();
@@ -111,7 +141,7 @@ static Node * mul()
     }
 }
 
-// unary = ("+" | "-")? unary
+// unary := ("+" | "-")? unary
 //       | primary
 static Node*unary()
 {
@@ -121,7 +151,7 @@ static Node*unary()
         return new_binary(NK_SUB, new_num(0), unary());
     return primary();
 }
-//primary:=num | "(" expr ")"
+//primary:=num | "(" expr ")" | identity
 static Node * primary()
 {
     if(consume("("))
@@ -130,24 +160,38 @@ static Node * primary()
         expect(")");
         return node;
     }
+    Token *id;
+    if((id=consume_ident())!=NULL)
+    {
+        Var *var = find_var(id);
+        if(var==NULL)
+            var = new_ivar(strndup(id->str, id->strlen));
+        return new_ident(var);
+    }
     return new_num(expect_num());
+}
+
+
+
+static Node *new_node(NodeKind kind)
+{
+    Node *node = calloc(1, sizeof(Node));
+    node->kind = kind;
+    return node;
 }
 
 //calloc one AST Node for integer num
 static Node * new_num(long val)
 {
-    Node *node = calloc(1, sizeof(Node));
+    Node *node = new_node(NK_NUM);
     node->constval = new_const();
     node->constval->val = val;
-    node->kind = NK_NUM;
     return node;
 }
-
 //calloc one AST Node for two-operand operator 
 static Node * new_binary(NodeKind kind,Node*lhs,Node*rhs)
 {
-    Node *node = calloc(1, sizeof(Node));
-    node->kind = kind;
+    Node *node = new_node(kind);
     node->lhs = lhs;
     node->rhs = rhs;
     node->temp = new_temp();
@@ -155,8 +199,57 @@ static Node * new_binary(NodeKind kind,Node*lhs,Node*rhs)
 }
 static Node *new_unary(NodeKind kind,Node*expr)
 {
-    Node *node = calloc(1, sizeof(Node));
-    node->kind = kind;
+    Node *node = new_node(kind);
     node->lhs = expr;
     return node;
+}
+static Node *new_ident(Var * var)
+{
+    Node *node = new_node(NK_IDENT);
+    node->var = var;
+    return node;
+}
+
+
+static Var *find_var(Token *tok)
+{
+    for (Var *var = local; var;var=var->next)
+        if(strlen(var->name)==tok->strlen && strncmp(var->name,tok->str,tok->strlen)==0)
+            return var;
+    return NULL;
+}
+static Var *new_ivar(char *name)
+{
+    Var *var = calloc(1, sizeof(Var));
+    var->name = name;
+    var->next = local;
+    var->offset = local_offset;
+    local_offset += 4;
+    local = var;
+    return var;
+}
+
+Temp *new_temp()
+{
+    static int tempsize = 0;
+    Temp *newnode = calloc(1, sizeof(Temp));
+    newnode->next = temp;
+    temp = newnode;
+    temp->no = tempsize++;
+    return temp;
+}
+
+ConstVal *new_const()
+{
+    ConstVal *newnode = calloc(1, sizeof(ConstVal));
+    newnode->next = constval;
+    constval = newnode;
+    return constval;
+}
+
+char *strndup(const char *str,int len)
+{
+    char *nstr = calloc(len+1, sizeof(char));
+    strncpy(nstr, str, len);
+    return nstr;
 }

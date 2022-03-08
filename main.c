@@ -8,7 +8,6 @@ FILE *quadout;
 FILE *codeout;
 
 
-Node *ASTroot;
 QuadSet *quadset;
 
 
@@ -27,8 +26,8 @@ int main(int argc, char **argv)
     user_input = argv[1];
     Token *tokenList = tokenize();
     curtoken = tokenList;
-    ASTroot = program();
-    gen_quadset(ASTroot);
+    Function * func = program();
+    gen_quadset(func);
     print_quadset();
     gen_code();
     // printf(".intel_syntax noprefix\n");

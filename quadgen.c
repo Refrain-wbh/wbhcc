@@ -13,7 +13,31 @@ static void enlarge_capacity()
     }
     quadset->list = newlist;
     quadset->capacity = newcap;
+}
 
+//使用一种简单的方式计算temp的offset
+//目前来说，四元式的arg1 arg2是使用处，result为定义处，return中的arg1是expr
+//assign则左侧是equality，因此可以直接遍历四元式的temp
+//返回temp占用的总大小
+static int calc_temp_offset()
+{
+    int offset = 0;
+    int maxoffset = 0;
+    for (int i = 0; i < quadset->size;++i)
+    {
+        Quad *quad = &quadset->list[i];
+        Temp *arg1 = quad->arg1 ? quad->arg1->temp : NULL;
+        Temp *arg2 = quad->arg2 ? quad->arg2->temp : NULL;
+        Temp *result = quad->result ? quad->result->temp : NULL;
+        
+        if(arg1)
+            offset -= 4;
+        if(arg2)
+            offset -= 4;
+        if(result)
+            result->offset = offset, offset += 4;
+        maxoffset = maxoffset > offset ? maxoffset : offset;
+    }
 }
 
 //operation,so must have a result (temp var) in result-node
@@ -60,12 +84,16 @@ static int gen_operation(NodeKind kind,Node*arg1,Node*arg2,Node*result)
     case NK_RETURN:
         cur->op = QK_RETURN;
         break;
+    case NK_ASSIGN:
+        cur->op = QK_ASSIGN;
+        break;
     default:
         break;
     }
     return idx;
 }
-void gen_quadset(Node*ASTroot)
+
+void gen_quadcode(Node *ASTroot)
 {
     do{
         switch (ASTroot->kind)
@@ -78,21 +106,31 @@ void gen_quadset(Node*ASTroot)
         case NK_EQ:
         case NK_NE:
         case NK_LT:
-            gen_quadset(ASTroot->lhs);
-            gen_quadset(ASTroot->rhs);
+            gen_quadcode(ASTroot->lhs);
+            gen_quadcode(ASTroot->rhs);
             gen_operation(ASTroot->kind, ASTroot->lhs, ASTroot->rhs, ASTroot);
             break;
         case NK_RETURN:
-            gen_quadset(ASTroot->lhs);
+            gen_quadcode(ASTroot->lhs);
             gen_operation(ASTroot->kind, ASTroot->lhs, NULL, NULL);
+            break;
+        case NK_ASSIGN:
+            gen_quadcode(ASTroot->lhs);
+            gen_quadcode(ASTroot->rhs);
+            gen_operation(ASTroot->kind, ASTroot->rhs, NULL, ASTroot->lhs);
             break;
         default:
             break;
         }
     } while ((ASTroot = ASTroot->next)!=NULL);
 }
-
-
+void gen_quadset(Function*function)
+{
+    gen_quadcode(function->node);
+    int tempsize=calc_temp_offset();
+    quadset->temp_size = tempsize;
+    quadset->local_size = function->local_size;
+}
 
 // print const or var or temp
 static void print_addr(Node*node)
@@ -102,6 +140,10 @@ static void print_addr(Node*node)
     if (node->kind == NK_NUM)
     {
         print("%d", node->constval->val);
+    }
+    else if(node->kind== NK_IDENT)
+    {
+        print("%s", node->var->name);
     }
     else
     {

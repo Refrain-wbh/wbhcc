@@ -12,6 +12,7 @@
 typedef enum
 {
     TK_RESERVED, // punctuators or key words
+    TK_IDENT,   //identity
     TK_NUM,   // Integer literals
     TK_EOF,   // End-of-file markers
 } TokenKind;
@@ -43,37 +44,41 @@ typedef enum
     NK_LT,      // <  ### > ==> <
     NK_LE,      // <=
     NK_RETURN,  // "return"
+    NK_IDENT,   // id
+    NK_ASSIGN,  // =
 
 } NodeKind;
-/*************sym table*****************/ 
+/*************sym table*****************/
+
+typedef struct Var Var;
+struct Var
+{
+    Var *next;
+    char * name;
+    int offset;
+    int reg;
+    int inmemory;
+};
 typedef struct Temp Temp;
 struct Temp
 {
+    Temp *next;
     int no;
+    int offset;
     //for codegen use
     int reg;//means a reg(index from 1),0 means not in a reg
     int inmemory;//0 means not in memory ,others mean in memory
 };
-typedef struct TempList TempList;
-struct TempList
-{
-    TempList *next;
-    Temp temp;
-};
 
-typedef struct Constval Constval;
-struct Constval
+typedef struct ConstVal ConstVal;
+struct ConstVal
 {
+    ConstVal *next;
     int val;
     // for codegen use
     int reg;//means a reg(index from 1),0 means not in a reg
 };
-typedef struct ConstvalList ConstvalList;
-struct ConstvalList
-{
-    ConstvalList *next;
-    Constval constval;
-};
+
 
 // AST node
 typedef struct Node Node;
@@ -84,12 +89,19 @@ struct Node
     Node *lhs;      //  left head side
     Node *rhs;      //  right head side
     Node *next;    //next state
-    Constval * constval;       //used if kind == ND_NUM
+    ConstVal * constval;       //used if kind == ND_NUM
     Temp *temp;     //used if kind is a operator
-
+    Var *var;
 };
 
-
+typedef struct Function Function;
+struct Function
+{
+    Node *node;
+    Var *local;
+    int local_size;
+    Temp *temp;
+};
 
 // quad node
 typedef enum
@@ -103,6 +115,7 @@ typedef enum
     QK_LT,      // <  ### > ==> <
     QK_LE,      // <=
     QK_RETURN,  // "return"
+    QK_ASSIGN,  // =
 } QuadKind;
 typedef struct Quad Quad;
 struct Quad
@@ -119,6 +132,8 @@ struct QuadSet
     Quad *list;
     int capacity;
     int size;
+    int local_size;
+    int temp_size;
 };
 
 
@@ -140,22 +155,24 @@ extern QuadSet *quadset;
 // funtion of tokenize
 bool at_eof();
 bool consume(char* op);
+Token *consume_ident();
+
 int expect_num();
 void expect(char *op);
 Token *tokenize();
 
 //function of symtable
 Temp *new_temp();
-Constval *new_const();
+ConstVal *new_const();
 void print_tempaddr(FILE *out, Temp *temp);
 
 //funtion of parse
-Node *program();
+Function *program();
 
 
 
 //funtion of quadgen
-void gen_quadset(Node *ASTroot);
+void gen_quadset(Function*func);
 void print_quadset();
 
 //funtion of codegen

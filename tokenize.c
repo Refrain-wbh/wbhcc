@@ -53,6 +53,14 @@ bool consume(char *op)
     curtoken = curtoken->next;
     return true;
 }
+Token *consume_ident()
+{
+    if(curtoken->kind!=TK_IDENT)
+        return NULL;
+    Token *temp = curtoken;
+    curtoken = curtoken->next;
+    return temp;
+}
 //判断p是否是以q为开始
 bool startwith(const char * p,const char * q)
 {
@@ -67,6 +75,7 @@ Token* new_token(TokenKind kind,Token* cur,char * str , int strlen)
     newtoken->strlen = strlen;
     return newtoken;
 }
+
 Token *tokenize()
 {
     Token head;
@@ -85,6 +94,7 @@ Token *tokenize()
         }
 
         
+        //关键字识别
         unsigned int i;
         for (i = 0;i<keyscount;++i)
         {
@@ -98,6 +108,17 @@ Token *tokenize()
         }
         if(i<keyscount)
             continue;
+
+        //变量名识别
+        if(isalpha(*p))
+        {
+            char *q=p;
+            while(isalnum(*q))
+                q++;
+            cur = new_token(TK_IDENT, cur, p, q - p);
+            p = q;
+            continue;
+        }
 
         if (startwith(p, "==") || // two char punct
             startwith(p, "!=") ||
