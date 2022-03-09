@@ -18,6 +18,7 @@ static Node *new_unary(NodeKind kind,Node*expr);
 static Node *new_ident(Var *var);
 
 Function *program();
+static Node *args();
 static Node *stmt();
 static Node *expr();
 static Node *assign();
@@ -54,6 +55,7 @@ Function *program()
 //       |  "while" "(" expr ")" stmt
 //       |  "for" "(" expr? ";" expr? ";" expr? ";" ")"stmt
 //       | "return" expr ";"
+//       | "{" stmt* "}"
 static Node*stmt()
 {
     if(consume("return"))
@@ -102,6 +104,19 @@ static Node*stmt()
             expect(")");
         }
         node->then = stmt();
+        return node;
+    }
+    if(consume("{"))
+    {
+        Node head = {};
+        Node *cur = &head;
+        while(!consume("}"))
+        {
+            cur->next = stmt();
+            cur = cur->next;
+        }
+        Node *node = new_node(NK_BLOCK);
+        node->body = head.next;
         return node;
     }
     Node *node = expr();
@@ -196,7 +211,24 @@ static Node*unary()
         return new_binary(NK_SUB, new_num(0), unary());
     return primary();
 }
-//primary:=num | "(" expr ")" | identity
+//  args:= "(" ( assign  ("," assign)* )? ")"
+//args 的左括号已经被读入
+static Node * args()
+{
+    if(consume(")"))
+        return NULL;
+    Node *node = assign();
+    Node *cur = node;
+    while(consume(","))
+    {
+        cur->next = assign();
+        cur = cur->next;
+    }
+    expect(")");
+    return node;
+}
+
+//primary:=num | "(" expr ")" | identity (args)?
 static Node * primary()
 {
     if(consume("("))
@@ -208,6 +240,14 @@ static Node * primary()
     Token *id;
     if((id=consume_ident())!=NULL)
     {
+        if(consume("("))//means it is a function
+        {
+            Node *node = new_node(NK_FUNCTION);
+            node->temp = new_temp();
+            node->funcname = strndup(id->str, id->strlen);
+            node->args = args();
+            return node;
+        }
         Var *var = find_var(id);
         if(var==NULL)
             var = new_ivar(strndup(id->str, id->strlen));
@@ -268,19 +308,19 @@ static Var *new_ivar(char *name)
     Var *var = calloc(1, sizeof(Var));
     var->name = name;
     var->next = local;
-    var->offset = local_offset;
     local_offset += 4;
+    var->offset = local_offset;
     local = var;
     return var;
 }
 
 Temp *new_temp()
 {
-    static int tempsize = 0;
+    static int tempnum = 0;
     Temp *newnode = calloc(1, sizeof(Temp));
     newnode->next = temp;
     temp = newnode;
-    temp->no = tempsize++;
+    temp->no = tempnum++;
     return temp;
 }
 

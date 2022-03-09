@@ -49,6 +49,8 @@ typedef enum
     NK_IF,      //if
     NK_WHILE,   //while
     NK_FOR,     //for
+    NK_BLOCK,   //block
+    NK_FUNCTION,//funtion  
 
 } NodeKind;
 /*************sym table*****************/
@@ -104,6 +106,13 @@ struct Node
     //for state (add)
     Node * init;
     Node *inc;
+
+    // {...}
+    Node *body;
+
+    //function
+    char *funcname;
+    Node *args;
 };
 
 typedef struct Function Function;
@@ -131,6 +140,8 @@ typedef enum
     QK_JEZ,     //如果等于0则跳转
     QK_JMP,     //无条件跳转
     QK_LABEL,   //跳转标志
+    QK_CALL,    //call function
+    QK_PARAM,
 } QuadKind;
 typedef struct Quad Quad;
 struct Quad

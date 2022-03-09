@@ -35,6 +35,8 @@ static char *regname[] = {
     "%r14d",
     "%r15d",
 };
+static char *argreg[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
+static int eax = 1, edx = 4;
 
 static int regnum = sizeof(regname) / sizeof(regname[0]);
 static Rvalue rvalue[sizeof(regname) / sizeof(regname[0])];
@@ -255,10 +257,6 @@ void gen_2operate_code(Quad *quad)
 //将比较结果统一放在eax中,因此需要对eax进行清空处理等
 void gen_cmp_code(Quad *quad)
 {
-    const int eax = 1;
-#ifdef DEBUG
-    assert(strcmp(regname[eax], "%eax") == 0);
-#endif
     int regx = 0, regy;
     if (!inreg(quad->arg1))
     {
@@ -315,11 +313,6 @@ void gen_cmp_code(Quad *quad)
 //所以这里会进行一系列整除和商的运算
 void gen_div_code(Quad *quad)
 {
-    const int edx = 4, eax = 1;
-#ifdef DEBUG
-    assert(strcmp(regname[edx], "%edx") == 0);
-    assert(strcmp(regname[eax], "%eax") == 0);
-#endif
     //首先清空edx，并生成相应的保存语句
     if (rvalue[edx].kind != RS_NULL)
     {
@@ -380,10 +373,6 @@ return生成思路：因为需要保存在eax中，所以需要将表达式的�
 然后将表达式移动或者加载到eax中*/
 void gen_return_code(Quad *quad)
 {
-    const int eax = 1;
-#ifdef DEBUG
-    assert(strcmp(regname[eax], "%eax") == 0);
-#endif
     Node *ret = quad->arg1;
     int reg = get_reg(ret);
     if (eax != reg)
@@ -461,15 +450,47 @@ void gen_jump_code(Quad*quad)
         break;
     }
 }
+void gen_call_code(Quad * quad)
+{
+    //权且采用一种简单的方式，如果是变量或者是临时变量都保存下俩
+    for (int reg = 1; reg < regnum;++reg)
+    {
+        store(reg);
+        clear_reg(reg);
+    }
+    Node *func = quad->result;
+    int argno=0;
+    for (Node *argnode = func->args; argnode;argnode=argnode->next)
+    {
+        int reg = regidx(argreg[argno]);
+        load(argnode, reg);
+        set_reg(argnode,reg);
+        argno++;
+        if (argno >= 6)
+            break;
+    }
+    print("\tcall %s\n", func->funcname);
+    //记得返回值和func绑定，func节点拥有一个temp位置
+    set_reg(func, eax);
+}
 void gen_code()
 {
+    
+    
+#ifdef DEBUG 
+    assert(strcmp(regname[edx], "%edx") == 0);
+    assert(strcmp(regname[eax], "%eax") == 0);
+#endif
 
     print(".global main\n");
     print("main:\n");
 
     print("\tpushq %%rbp\n");
     print("\tmovq %%rsp, %%rbp\n");
-    print("\tsubq $%d,%%rsp\n",quadset->local_size+quadset->temp_size);
+    int size_of_all = quadset->local_size + quadset->temp_size;
+    //16对齐
+    size_of_all = (size_of_all+15) / 16 * 16 ;
+    print("\tsubq $%d,%%rsp\n",size_of_all);
 
     for (int i = 0; i < quadset->size; ++i)
     {
@@ -507,6 +528,9 @@ void gen_code()
         case QK_LABEL:
             store_all_var();
             print(".L%d:\n", quad->label);
+            break;
+        case QK_CALL:
+            gen_call_code(quad);
             break;
         default:
             break;
