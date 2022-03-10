@@ -17,6 +17,7 @@ static Node *new_ident(Var *var);
 
 Function *program();
 static Function *function();
+static VarList *func_params();
 static Node *args();
 static Node *stmt();
 static Node *expr();
@@ -41,7 +42,7 @@ Function * program()
     }
     return func.next;
 }
-// function := ident "(" ")" "{" stmt* "}"
+// function := ident "(" func_params? ")" "{" stmt* "}"
 Function *function()
 {
     local = NULL;
@@ -52,8 +53,11 @@ Function *function()
     Node *cur = &head;
     
     char * funcname = expect_ident();
+    VarList *params = NULL;
     expect("(");
-    expect(")");
+    if(!consume(")"))
+        params = func_params();
+    
     expect("{");
     
     while(!consume("}"))
@@ -68,8 +72,28 @@ Function *function()
     func->local = local;
     func->temp = temp;
     func->local_size = local_offset;
+    func->params = params;
     return func;
 }
+// func_params := ident(,ident)*
+static VarList * func_params()
+{
+    VarList *params = calloc (1, sizeof(VarList));
+    VarList *cur = params;
+    
+    cur->var = new_ivar(expect_ident());
+    
+    while(!consume(")"))
+    {
+        expect(",");
+        cur->next = calloc(1, sizeof(VarList));
+        cur = cur->next;
+        cur->var = new_ivar(expect_ident());
+    }
+
+    return params;
+}
+
 //  stmt := expr ";"
 //       |  "if" "(" expr ")" stmt ("else" "stmt")?
 //       |  "while" "(" expr ")" stmt

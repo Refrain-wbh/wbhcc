@@ -473,6 +473,21 @@ void gen_call_code(Quad * quad)
     //记得返回值和func绑定，func节点拥有一个temp位置
     set_reg(func, eax);
 }
+//初始化函数参数，将其与寄存器关联起来
+void init_func_params()
+{
+    int paramidx = 0;
+    for (VarList *params = quadset->params; params;params = params->next)
+    {
+        Var *param = params->var;
+        //将其与寄存器关联起来
+        int reg = regidx(argreg[paramidx]);
+        rvalue[reg].kind = RS_LOCAL;
+        rvalue[reg].local = param;
+        param->reg = reg;
+        paramidx++;
+    }
+}
 void gen_funcion()
 {
     print(".global %s\n",quadset->name);
@@ -485,6 +500,7 @@ void gen_funcion()
     size_of_all = (size_of_all+15) / 16 * 16 ;
     print("\tsubq $%d,%%rsp\n",size_of_all);
 
+    init_func_params();
     for (int i = 0; i < quadset->size; ++i)
     {
         Quad *quad = &quadset->list[i];

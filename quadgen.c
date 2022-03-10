@@ -251,6 +251,7 @@ QuadSet* gen_quadset(Function*func)
     quadset->temp_size = tempsize;
     quadset->local_size = func->local_size;
     quadset->name = func->name;
+    quadset->params = func->params;
 
     return quadset;
 }

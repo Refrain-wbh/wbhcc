@@ -64,6 +64,13 @@ struct Var
     int reg;
     int inmemory;
 };
+// for params 
+typedef struct VarList VarList;
+struct VarList
+{
+    Var *var;
+    VarList *next;
+};
 typedef struct Temp Temp;
 struct Temp
 {
@@ -124,6 +131,7 @@ struct Function
     Temp *temp;
     Function *next;
     char *name;
+    VarList *params;
 };
 
 // quad node
@@ -158,12 +166,13 @@ struct Quad
 typedef struct QuadSet QuadSet;
 struct QuadSet
 {
-    Quad *list;
-    int capacity;
-    int size;
-    int local_size;
-    int temp_size;
-    char *name;
+    Quad *list;  //四元式集合
+    int capacity;//list的容量
+    int size;       //当前四元式数量
+    int local_size; //局部变量占据的堆栈大小
+    int temp_size;  //临时变量占据的堆栈大小
+    char *name;     //function‘s name  一个quadset对应一个function
+    VarList *params; // function's params
     QuadSet *next;
 };
 
