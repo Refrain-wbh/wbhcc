@@ -22,12 +22,11 @@ int main(int argc, char **argv)
     quadout =  fopen("quad.txt", "wb+");
     codeout = fopen("code.S", "wb+");
 
-    quadset = calloc(1, sizeof(QuadSet));
     user_input = argv[1];
     Token *tokenList = tokenize();
     curtoken = tokenList;
-    Function * func = program();
-    gen_quadset(func);
+    Function * funclist = program();
+    quadset = gen_quadsets(funclist);
     print_quadset();
     gen_code();
     // printf(".intel_syntax noprefix\n");

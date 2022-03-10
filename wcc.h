@@ -110,8 +110,8 @@ struct Node
     // {...}
     Node *body;
 
-    //function
-    char *funcname;
+    //functioncall
+    char *funcname;//used for function call
     Node *args;
 };
 
@@ -122,6 +122,8 @@ struct Function
     Var *local;
     int local_size;
     Temp *temp;
+    Function *next;
+    char *name;
 };
 
 // quad node
@@ -161,6 +163,8 @@ struct QuadSet
     int size;
     int local_size;
     int temp_size;
+    char *name;
+    QuadSet *next;
 };
 
 
@@ -182,7 +186,8 @@ extern QuadSet *quadset;
 // funtion of tokenize
 bool at_eof();
 bool consume(char* op);
-Token *consume_ident();
+char *consume_ident();
+char *expect_ident();
 
 int expect_num();
 void expect(char *op);
@@ -199,7 +204,7 @@ Function *program();
 
 
 //funtion of quadgen
-void gen_quadset(Function*func);
+QuadSet* gen_quadsets(Function*funclist);
 void print_quadset();
 
 //funtion of codegen

@@ -41,6 +41,7 @@ static int eax = 1, edx = 4;
 static int regnum = sizeof(regname) / sizeof(regname[0]);
 static Rvalue rvalue[sizeof(regname) / sizeof(regname[0])];
 
+
 //目前采用LRU来管理寄存器。
 //根据一个有关运算的四元式，根据这个四元式分配寄存器
 //要注意到，op x,y 中x会被修改，并作为z(z=x op y)
@@ -390,8 +391,7 @@ void gen_return_code(Quad *quad)
             //加载之后立刻就失效了，所以不需要做操作
         }
     }
-    print("\tleave\n");
-    print("\tret\n");
+    print("\tjmp .L.return.%s\n", quadset->name);
 }
 
 void gen_assign_code(Quad *quad)
@@ -473,17 +473,10 @@ void gen_call_code(Quad * quad)
     //记得返回值和func绑定，func节点拥有一个temp位置
     set_reg(func, eax);
 }
-void gen_code()
+void gen_funcion()
 {
-    
-    
-#ifdef DEBUG 
-    assert(strcmp(regname[edx], "%edx") == 0);
-    assert(strcmp(regname[eax], "%eax") == 0);
-#endif
-
-    print(".global main\n");
-    print("main:\n");
+    print(".global %s\n",quadset->name);
+    print("%s:\n",quadset->name);
 
     print("\tpushq %%rbp\n");
     print("\tmovq %%rsp, %%rbp\n");
@@ -535,5 +528,24 @@ void gen_code()
         default:
             break;
         }
+    }
+
+    // Epilogue
+    
+    print(".L.return.%s:\n", quadset->name);
+    print("\tleave\n");
+    print("\tret\n");
+}
+void gen_code()
+{
+#ifdef DEBUG 
+    assert(strcmp(regname[edx], "%edx") == 0);
+    assert(strcmp(regname[eax], "%eax") == 0);
+#endif
+
+    while(quadset)
+    {
+        gen_funcion();
+        quadset = quadset->next;
     }
 }

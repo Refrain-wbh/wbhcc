@@ -28,6 +28,13 @@ bool at_eof()
 {
     return curtoken->kind == TK_EOF;
 }
+char *strndup(const char *str,int len)
+{
+    char *nstr = calloc(len+1, sizeof(char));
+    strncpy(nstr, str, len);
+    return nstr;
+}
+
 int expect_num()
 {
     if(curtoken->kind!=TK_NUM)
@@ -42,8 +49,16 @@ void expect(char *op)
 {
     if(curtoken->kind!=TK_RESERVED || strlen(op)!=curtoken->strlen ||
             strncmp(curtoken->str,op,curtoken->strlen))
-        error_at(curtoken->str,"expect \"%s\"",op);
+        error_at(curtoken->str,"expected \"%s\"",op);
     curtoken = curtoken->next;
+}
+char* expect_ident()
+{
+    if(curtoken->kind != TK_IDENT)
+        error_at(curtoken->str, "expected an identifier\n");
+    char *str = strndup(curtoken->str, curtoken->strlen);
+    curtoken = curtoken->next;
+    return str;
 }
 bool consume(char *op)
 {
@@ -53,13 +68,13 @@ bool consume(char *op)
     curtoken = curtoken->next;
     return true;
 }
-Token *consume_ident()
+char*consume_ident()
 {
     if(curtoken->kind!=TK_IDENT)
         return NULL;
     Token *temp = curtoken;
     curtoken = curtoken->next;
-    return temp;
+    return strndup(temp->str, temp->strlen);
 }
 //判断p是否是以q为开始
 bool startwith(const char * p,const char * q)
@@ -165,4 +180,5 @@ Token *tokenize()
     printf("token list end\n");*/
     return head.next;
 }
+
 

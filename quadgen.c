@@ -239,14 +239,31 @@ void gen_quadcode(Node *ASTroot)
         break;
     }
 }
-void gen_quadset(Function*function)
+
+QuadSet* gen_quadset(Function*func)
 {
-    for (Node *cur = function->node; cur;cur=cur->next)
+    quadset = calloc(1, sizeof(QuadSet));
+    
+    for (Node *cur = func->node; cur; cur = cur->next)
         gen_quadcode(cur);
 
     int tempsize=calc_temp_offset();
     quadset->temp_size = tempsize;
-    quadset->local_size = function->local_size;
+    quadset->local_size = func->local_size;
+    quadset->name = func->name;
+
+    return quadset;
+}
+QuadSet* gen_quadsets(Function*funclist)
+{
+    QuadSet qset;
+    QuadSet *curset = &qset;
+    for (Function *func = funclist; func;func=func->next)
+    {
+        curset->next = gen_quadset(func);
+        curset = curset->next;
+    }
+    return qset.next;
 }
 
 // print const or var or temp

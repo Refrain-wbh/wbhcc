@@ -6,9 +6,7 @@ static Temp *temp;
 static ConstVal *constval;
 
 /*####################parse##################*/
-static char *strndup(const char *str, int len);
-
-static Var *find_var(Token *tok);
+static Var *find_var(const char * id);
 static Var *new_ivar(char *name);
 
 static Node *new_node(NodeKind kind);
@@ -18,6 +16,7 @@ static Node *new_unary(NodeKind kind,Node*expr);
 static Node *new_ident(Var *var);
 
 Function *program();
+static Function *function();
 static Node *args();
 static Node *stmt();
 static Node *expr();
@@ -30,20 +29,41 @@ static Node *add();
 static Node *primary();
 
 
-// program := stmt*
-Function *program()
+// program := function*
+Function * program()
+{
+    Function func = {};
+    Function *cur = &func;
+    while(!at_eof())
+    {
+        cur->next = function();
+        cur = cur->next;
+    }
+    return func.next;
+}
+// function := ident "(" ")" "{" stmt* "}"
+Function *function()
 {
     local = NULL;
     temp = NULL;
     local_offset = 0;
+
     Node head = {};
     Node *cur = &head;
-    while(!at_eof())
+    
+    char * funcname = expect_ident();
+    expect("(");
+    expect(")");
+    expect("{");
+    
+    while(!consume("}"))
     {
         cur->next = stmt();
         cur = cur->next;
     }
+    
     Function *func = calloc(1, sizeof(Function));
+    func->name = funcname;
     func->node = head.next;
     func->local = local;
     func->temp = temp;
@@ -237,20 +257,20 @@ static Node * primary()
         expect(")");
         return node;
     }
-    Token *id;
+    char *id;
     if((id=consume_ident())!=NULL)
     {
         if(consume("("))//means it is a function
         {
             Node *node = new_node(NK_FUNCTION);
             node->temp = new_temp();
-            node->funcname = strndup(id->str, id->strlen);
+            node->funcname = id;
             node->args = args();
             return node;
         }
         Var *var = find_var(id);
         if(var==NULL)
-            var = new_ivar(strndup(id->str, id->strlen));
+            var = new_ivar(id);
         return new_ident(var);
     }
     return new_num(expect_num());
@@ -296,10 +316,11 @@ static Node *new_ident(Var * var)
 }
 
 
-static Var *find_var(Token *tok)
+static Var *find_var(const char * id)
 {
     for (Var *var = local; var;var=var->next)
-        if(strlen(var->name)==tok->strlen && strncmp(var->name,tok->str,tok->strlen)==0)
+        if(strlen(id)==strlen(var->name) && 
+            strcmp(var->name,id)==0)
             return var;
     return NULL;
 }
@@ -332,9 +353,3 @@ ConstVal *new_const()
     return constval;
 }
 
-char *strndup(const char *str,int len)
-{
-    char *nstr = calloc(len+1, sizeof(char));
-    strncpy(nstr, str, len);
-    return nstr;
-}
