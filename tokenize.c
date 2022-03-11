@@ -7,11 +7,8 @@ void error(char * fmt,...)
     vfprintf(errout, fmt, ap);
     fprintf(errout, "\n");
 }
-void error_at(char * loc,char *fmt,...)
+void verror_at(char *loc,char *fmt,va_list ap)
 {
-    va_list ap;
-    va_start(ap, fmt);
-
     char *startp = loc, *endp = loc;
     while (startp > user_input && *(startp - 1) == '\n')
         startp--;
@@ -23,6 +20,18 @@ void error_at(char * loc,char *fmt,...)
     vfprintf(errout, fmt, ap);
     fprintf(errout, "\n");
     exit(1);
+}
+void error_tok(Token*tok,char * fmt,...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    verror_at(tok->str, fmt, ap);
+}
+void error_at(char * loc,char *fmt,...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    verror_at(loc, fmt, ap);
 }
 bool at_eof()
 {
@@ -52,29 +61,30 @@ void expect(char *op)
         error_at(curtoken->str,"expected \"%s\"",op);
     curtoken = curtoken->next;
 }
-char* expect_ident()
+Token* expect_ident()
 {
     if(curtoken->kind != TK_IDENT)
         error_at(curtoken->str, "expected an identifier\n");
-    char *str = strndup(curtoken->str, curtoken->strlen);
+    Token *temp = curtoken;
     curtoken = curtoken->next;
-    return str;
+    return temp;
 }
-bool consume(char *op)
+Token* consume(char *op)
 {
     if(curtoken->kind!=TK_RESERVED|| strlen(op)!=curtoken->strlen ||   
                 strncmp(curtoken->str,op,curtoken->strlen))
-        return false;
+        return NULL;
+    Token *t = curtoken;
     curtoken = curtoken->next;
-    return true;
+    return t;
 }
-char*consume_ident()
+Token*consume_ident()
 {
     if(curtoken->kind!=TK_IDENT)
         return NULL;
     Token *temp = curtoken;
     curtoken = curtoken->next;
-    return strndup(temp->str, temp->strlen);
+    return temp;
 }
 //判断p是否是以q为开始
 bool startwith(const char * p,const char * q)

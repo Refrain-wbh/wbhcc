@@ -21,7 +21,7 @@ int main(int argc, char **argv)
     errout = stderr;
     quadout =  fopen("quad.txt", "wb+");
     codeout = fopen("code.S", "wb+");
-
+    setbuf(codeout, NULL);
     user_input = argv[1];
     Token *tokenList = tokenize();
     curtoken = tokenList;

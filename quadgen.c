@@ -106,6 +106,16 @@ static Quad * gen_operation(NodeKind kind,Node*arg1,Node*arg2,Node*result)
 
     switch (kind)
     {
+    
+    case NK_PTR_ADD:
+        quad->op = QK_PTR_ADD;
+        break;
+    case NK_PTR_SUB:
+        quad->op = QK_PTR_SUB;
+        break;
+    case NK_PTR_DIFF:
+        quad->op = QK_PTR_DIFF;
+        break;
     case NK_ADD:
         quad->op = QK_ADD;
         break;
@@ -136,6 +146,12 @@ static Quad * gen_operation(NodeKind kind,Node*arg1,Node*arg2,Node*result)
     case NK_ASSIGN:
         quad->op = QK_ASSIGN;
         break;
+    case NK_DEREF:
+        quad->op = QK_DEREF;
+        break;
+    case NK_ADDR:
+        quad->op = QK_ADDR;
+        break;
     default:
         break;
     }
@@ -146,6 +162,9 @@ void gen_quadcode(Node *ASTroot)
 {
     switch (ASTroot->kind)
     {
+    case NK_PTR_ADD:
+    case NK_PTR_SUB:
+    case NK_PTR_DIFF:
     case NK_ADD:
     case NK_SUB:
     case NK_DIV:
@@ -235,6 +254,11 @@ void gen_quadcode(Node *ASTroot)
         gen_call(ASTroot);
         break;
     }
+    case NK_ADDR:
+    case NK_DEREF:
+        gen_quadcode(ASTroot->lhs);
+        gen_operation(ASTroot->kind, ASTroot->lhs, NULL, ASTroot);
+        break;
     default:
         break;
     }
@@ -276,7 +300,7 @@ static void print_addr(Node*node)
     {
         print("%d", node->constval->val);
     }
-    else if(node->kind== NK_IDENT)
+    else if(node->kind== NK_VAR)
     {
         print("%s", node->var->name);
     }

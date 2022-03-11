@@ -18,7 +18,7 @@ struct Rvalue
     Temp *temp;
     Var *local;
 };
-static char *regname[] = {
+static const char *regname[] = {
     "",
     "%eax",
     "%ebx",
@@ -35,12 +35,30 @@ static char *regname[] = {
     "%r14d",
     "%r15d",
 };
+static const char *regname64[] = {
+    "",
+    "%rax",
+    "%rbx",
+    "%rcx",
+    "%rdx",
+    "%rsi",
+    "%rdi",
+    "%r8",
+    "%r9",
+    "%r10",
+    "%r11",
+    "%r12",
+    "%r13",
+    "%r14",
+    "%r15",
+};
 static char *argreg[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
 static int eax = 1, edx = 4;
 
 static int regnum = sizeof(regname) / sizeof(regname[0]);
 static Rvalue rvalue[sizeof(regname) / sizeof(regname[0])];
-
+#define ANY_REG -1
+#define MEMORY  0
 
 //目前采用LRU来管理寄存器。
 //根据一个有关运算的四元式，根据这个四元式分配寄存器
@@ -58,7 +76,7 @@ static int get_reg(Node *node)
     int regstate = 0;
     if (node->kind == NK_NUM) // is const
         regstate = node->constval->reg;
-    else if (node->kind == NK_IDENT)
+    else if (node->kind == NK_VAR)
         regstate = node->var->reg;
     else
         regstate = node->temp->reg;
@@ -91,6 +109,7 @@ static void clear_reg(int reg)
     rvalue[reg].kind = RS_NULL;
 }
 //将寄存器中的内容存储到内存，生成对应指令，注意不会清空reg，但会设置inmemory
+//可能存在只想保存，但不想清空关系的情况
 static void store(int reg)
 {
     if (rvalue[reg].kind == RS_TMP && rvalue[reg].temp->inmemory == 0)
@@ -107,17 +126,24 @@ static void store(int reg)
         rvalue[reg].local->inmemory = 1;
     }
 }
+static void store_if_islocal(int reg)
+{
+    if(rvalue[reg].kind == RS_LOCAL)
+        store(reg);
+}
 //设置reg以及对应的变量常量等表
 static void set_reg(Node *node, int reg)
 {
     clear_reg(reg);
+    int nodereg = get_reg(node);
+    clear_reg(nodereg);
     if (node->kind == NK_NUM)
     {
         rvalue[reg].kind = RS_CONST;
         rvalue[reg].constval = node->constval;
         node->constval->reg = reg;
     }
-    else if (node->kind == NK_IDENT)
+    else if (node->kind == NK_VAR)
     {
         rvalue[reg].kind = RS_LOCAL;
         rvalue[reg].local = node->var;
@@ -137,7 +163,7 @@ static void load(Node *node, int reg)
     {
         print("\tmovl $%d,%s\n", node->constval->val, regname[reg]);
     }
-    else if (node->kind == NK_IDENT)
+    else if (node->kind == NK_VAR)
     {
         int local_offset = node->var->offset;
         print("\tmovl -%d(%%rbp),%s\n", local_offset, regname[reg]);
@@ -148,6 +174,7 @@ static void load(Node *node, int reg)
         print("\tmovl -%d(%%rbp),%s\n", quadset->local_size + temp_offset, regname[reg]);
     }
 }
+
 //分配一个寄存器，如果寄存器不空闲则还需要清空寄存器
 static int alloc_reg()
 {
@@ -181,6 +208,92 @@ static void store_all_var()
         }
     }
 }
+//将地址读入reg中
+static void get_addr(Node*node,int reg)
+{
+    if(node->kind == NK_VAR)
+    {
+        int local_offset = node->var->offset;
+        print("\tleaq -%d(%%rbp),%s\n", local_offset, regname64[reg]);
+        return;
+    }
+    error_tok(node->tok, "expected an var");
+}
+static void get_content(int addr_reg,int tar_reg)
+{
+    store_all_var();
+    print("\tmovl (%s),%s\n", regname64[addr_reg], regname[tar_reg]);
+}
+/*
+将arg1移动到reg1中 包括如此情况：
+两者均为有内容的，那么则表示将arg1移动到reg1中，如果arg1中本来就在另一个寄存器中，则
+表示在寄存器之间移动，如果不在寄存器中，则表示加载
+如果arg1为NULL，则表示将reg1清空
+如果reg1为空，则表示将arg1清空
+如果reg1为-1，则表示将arg1分配到任何一个寄存器中，如果在寄存器中，则不分配
+*/
+
+static void move_node(Node*node,int treg)
+{
+    if(node)
+    {
+        int reg = get_reg(node);
+        if(reg == treg)
+            return;
+        
+        if(treg == MEMORY)//则reg必然>0
+        {
+            store(reg);
+            clear_reg(reg);
+        }
+        else if(treg==ANY_REG)    
+        {
+            if(reg > 0)
+                return;
+            //否则表示，在内存中，要加载到任何一个寄存器中
+            reg = alloc_reg();
+            load(node, reg);
+            set_reg(node, reg);
+        }
+        else//有特定目标reg
+        {
+            store(treg);
+            clear_reg(treg);
+            if(reg>0)   //表示在不同reg之间切换
+            {
+                print("\tmovl %s,%s\n", regname[reg], regname[treg]);
+                clear_reg(reg);
+                set_reg(node, treg);
+            }
+            else 
+            {
+                load(node, treg);
+                set_reg(node, treg);
+            }
+        }
+    }
+    else //表示清空treg
+    {
+        store(treg);
+        clear_reg(treg);
+    }
+}
+
+static void move_2node(Node*arg1,int reg1,Node*arg2,int reg2)
+{
+    move_node(arg1,reg1);
+    int temp=rvalue[reg1].kind;
+    rvalue[reg1].kind = RS_NOTUSE;
+    move_node(arg2, reg2);
+    rvalue[reg1].kind = temp;
+}
+static void drop_if_istemp(int reg)
+{
+    if(rvalue[reg].kind == RS_TMP)
+        clear_reg(reg);
+}
+
+//
 /*
  *
 
@@ -209,33 +322,14 @@ static void store_all_var()
 //生成2操作数的运算代码
 void gen_2operate_code(Quad *quad)
 {
-    int regx = 0, regy;
-    if (!inreg(quad->arg1))
-    {
-        regx = alloc_reg();
-        rvalue[regx].kind = RS_NOTUSE;
-    }
-    if (!inreg(quad->arg2))
-    {
-        regy = alloc_reg();
-        set_reg(quad->arg2, regy);
-        load(quad->arg2, regy);
-    }
-    if (regx)
-    {
-        set_reg(quad->arg1, regx);
-        load(quad->arg1, regx);
-    }
+    move_2node(quad->arg1, ANY_REG, quad->arg2, ANY_REG);
     // from now  x y reg is set sucess both cotain the right val
-    regx = get_reg(quad->arg1), regy = get_reg(quad->arg2);
+    
+    int regx = get_reg(quad->arg1), regy = get_reg(quad->arg2);
+    
+    //修改寄存器状态，设置结果保存的位置 由于生成的必然是临时变量，故可以不保存
     if (rvalue[regx].kind == RS_LOCAL)
         store(regx);
-    clear_reg(regx);
-
-    //如果是第二个操作数是临时变量，则可以直接丢弃
-    if (rvalue[regy].kind == RS_TMP)
-        clear_reg(regy);
-
     switch (quad->op)
     {
     case QK_ADD:
@@ -251,44 +345,22 @@ void gen_2operate_code(Quad *quad)
         break;
     }
 
-    //设置结果保存的位置 由于生成的必然是临时变量，故可以不保存
     set_reg(quad->result, regx);
+    //如果是第二个操作数是临时变量，则可以直接丢弃
+    drop_if_istemp(regy);
 }
 
 //将比较结果统一放在eax中,因此需要对eax进行清空处理等
 void gen_cmp_code(Quad *quad)
 {
-    int regx = 0, regy;
-    if (!inreg(quad->arg1))
-    {
-        regx = alloc_reg();
-        rvalue[regx].kind = RS_NOTUSE;
-    }
-    if (!inreg(quad->arg2))
-    {
-        regy = alloc_reg();
-        set_reg(quad->arg2, regy);
-        load(quad->arg2, regy);
-    }
-    if (regx)
-    {
-        set_reg(quad->arg1, regx);
-        load(quad->arg1, regx);
-    }
-
+    move_2node(quad->arg1, ANY_REG, quad->arg2, ANY_REG);
     // from now  x y reg is set sucess
-    regx = get_reg(quad->arg1), regy = get_reg(quad->arg2);
-    print("\tcmpl %s,%s\n", regname[regy], regname[regx]);
-
-    if (rvalue[regx].kind == RS_TMP)
-        clear_reg(regx);
-    if (rvalue[regy].kind == RS_TMP)
-        clear_reg(regy);
-    //然后清空eax，为结果留下空间
+    int regx = get_reg(quad->arg1), regy = get_reg(quad->arg2);
+    //clear eax for store
     store(eax);
     clear_reg(eax);
-    set_reg(quad->result, eax);
 
+    print("\tcmpl %s,%s\n", regname[regy], regname[regx]);
     switch (quad->op)
     {
     case QK_EQ:
@@ -307,6 +379,12 @@ void gen_cmp_code(Quad *quad)
         break;
     }
     print("\tmovsbl %%al,%%eax\n");
+
+    
+    drop_if_istemp(regx);
+    drop_if_istemp(regy);
+    //然后清空eax，为结果留下空间
+    set_reg(quad->result, eax);
 }
 
 //由于除法指令需要保证[edx;eax]为被除数，所以没有和上文统一格式，因而单独生成
@@ -314,58 +392,26 @@ void gen_cmp_code(Quad *quad)
 //所以这里会进行一系列整除和商的运算
 void gen_div_code(Quad *quad)
 {
-    //首先清空edx，并生成相应的保存语句
-    if (rvalue[edx].kind != RS_NULL)
-    {
-        store(edx);
-        clear_reg(edx);
-    }
-    rvalue[edx].kind = RS_NOTUSE;
+    move_2node(quad->arg1, eax, NULL, edx);
+    int eaxrs = rvalue[eax].kind, edxrs = rvalue[edx].kind;
+    rvalue[eax].kind = RS_NOTUSE, rvalue[edx].kind = RS_NOTUSE;
+    move_node(quad->arg2, ANY_REG);
+    rvalue[eax].kind = eaxrs, rvalue[edx].kind = edxrs;
+    
+    int regy = get_reg(quad->arg2);
 
-    //然后获取arg1的reg，如果不是eax，那么就要先保存eax，然后将奥arg1加载到eax中
-    //注意div会让eax发生改变，但由于临时变量一次定义一次使用，所以无需担心
-    int xreg = get_reg(quad->arg1);
-    if (xreg != eax)
-    {
-        if (rvalue[eax].kind != RS_NULL)
-            store(eax);
-
-        if (xreg == 0)
-        {
-            set_reg(quad->arg1, eax);
-            load(quad->arg1, eax);
-        }
-        else
-        {
-            clear_reg(xreg);
-            set_reg(quad->arg1, eax);
-            print("\tmovl %s,%%eax\n", regname[xreg]);
-        }
-    }
-
-    //加载y
-    if (!inreg(quad->arg2))
-    {
-        RvalKind tmpkind = rvalue[eax].kind;
-        rvalue[eax].kind = RS_NOTUSE;
-
-        int yreg = alloc_reg();
-        set_reg(quad->arg2, yreg);
-        load(quad->arg2, yreg);
-
-        rvalue[eax].kind = tmpkind;
-    }
+    if(rvalue[eax].kind == RS_LOCAL)
+        store(eax);
 
     print("\tcltd\n");
-    print("\tidivl %s\n", regname[get_reg(quad->arg2)]);
+    print("\tidivl %s\n", regname[regy]);
+
 
     if (quad->op == QK_DIV)
         set_reg(quad->result, eax);
 
     //如果除数为临时变量，则直接丢弃
-    int regy = get_reg(quad->arg2);
-    if (rvalue[regy].kind == RS_TMP)
-        clear_reg(regy);
+    drop_if_istemp(regy);
 }
 
 /*
@@ -374,54 +420,21 @@ return生成思路：因为需要保存在eax中，所以需要将表达式的�
 然后将表达式移动或者加载到eax中*/
 void gen_return_code(Quad *quad)
 {
-    Node *ret = quad->arg1;
-    int reg = get_reg(ret);
-    if (eax != reg)
-    {
-        store(eax);
-        clear_reg(eax);
-        if (inreg(ret))
-        {
-            print("\tmovl %s,%%eax\n", regname[reg]);
-            clear_reg(reg);
-        }
-        else
-        {
-            load(ret, eax);
-            //加载之后立刻就失效了，所以不需要做操作
-        }
-    }
+    move_node(quad->arg1, eax);
     print("\tjmp .L.return.%s\n", quadset->name);
+    drop_if_istemp(eax);
 }
 
 void gen_assign_code(Quad *quad)
 {
     Node *source = quad->arg1, *target = quad->result;
     // target 必定是indentity 因而此时有local发生修改，注意修改inmemory的标志
-    int sreg = 0, treg = 0;
-    if (!inreg(source))
-    {
-        sreg = alloc_reg();
-        rvalue[sreg].kind = RS_NOTUSE;
-    }
-    if (!inreg(target))
-    {
-        treg = alloc_reg();
-        set_reg(target, treg);
-    }
-    if (sreg != 0)
-    {
-        load(source, sreg);
-        set_reg(source, sreg);
-    }
-    sreg = get_reg(source), treg = get_reg(target);
-
-    print("\tmovl %s,%s\n", regname[sreg], regname[treg]);
-
+    move_node(source, ANY_REG);
+    int sreg = get_reg(source);
+    set_reg(quad->result, sreg);
+    int treg = sreg;
     // target 内容已经发生改变，需要更新inmemory
     rvalue[treg].local->inmemory = 0;
-    if (rvalue[sreg].kind == RS_CONST)
-        clear_reg(sreg);
 }
 
 void gen_jump_code(Quad*quad)
@@ -431,14 +444,9 @@ void gen_jump_code(Quad*quad)
     {
     case QK_JEZ:
     {
-        int reg;
-        if(!inreg(quad->arg1))
-        {
-            reg = alloc_reg();
-            load(quad->arg1,reg);
-            set_reg(quad->arg1, reg);
-        }
-        reg = get_reg(quad->arg1);
+        move_node(quad->arg1, ANY_REG);
+        int reg = get_reg(quad->arg1);
+        clear_reg(reg);
         print("\tcmpl $0,%s\n", regname[reg]);
         print("\tje .L%d\n", quad->label);
         break;
@@ -452,7 +460,7 @@ void gen_jump_code(Quad*quad)
 }
 void gen_call_code(Quad * quad)
 {
-    //权且采用一种简单的方式，如果是变量或者是临时变量都保存下俩
+    //权且采用一种简单的方式，如果是变量或者是临时变量都保存下来
     for (int reg = 1; reg < regnum;++reg)
     {
         store(reg);
@@ -472,6 +480,10 @@ void gen_call_code(Quad * quad)
     print("\tcall %s\n", func->funcname);
     //记得返回值和func绑定，func节点拥有一个temp位置
     set_reg(func, eax);
+}
+void gen_get_addr_code(Quad*quad)
+{
+
 }
 //初始化函数参数，将其与寄存器关联起来
 void init_func_params()
@@ -541,6 +553,47 @@ void gen_funcion()
         case QK_CALL:
             gen_call_code(quad);
             break;
+        case QK_DEREF:
+        {
+            if(!inreg(quad->result))
+            {
+                set_reg(quad->result, alloc_reg());
+            }
+            move_node(quad->arg1, ANY_REG);
+            int treg = get_reg(quad->result), sreg = get_reg(quad->arg1);
+            get_content(sreg,treg);
+            drop_if_istemp(sreg);
+            break;
+        }
+        case QK_ADDR:
+        {
+            if(!inreg(quad->result))
+            {
+                int reg = alloc_reg();
+                set_reg(quad->result, reg);
+            }
+            int reg = get_reg(quad->result);
+            get_addr(quad->arg1, reg);
+            break;
+        }
+        case QK_PTR_ADD:
+        case QK_PTR_SUB:
+        {
+            Node*arg1=quad->arg1,*arg2=quad->arg2;
+            if(is_integer(arg1->kind))
+            {
+                Node *t = arg1;
+                arg1 = arg2;
+                arg2 = t;
+            }
+            
+            move_2node(arg1, ANY_REG, arg2, ANY_REG);
+            int regx = get_reg(arg1), regy = get_reg(arg2);
+            store_if_islocal(regy);
+            print("\timul %d,%s",)
+            break;
+        }
+
         default:
             break;
         }
@@ -551,6 +604,10 @@ void gen_funcion()
     print(".L.return.%s:\n", quadset->name);
     print("\tleave\n");
     print("\tret\n");
+
+    //清空所有的reg
+    for (int i = 1; i < regnum;++i)
+        clear_reg(i);
 }
 void gen_code()
 {

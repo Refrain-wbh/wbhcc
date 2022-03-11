@@ -9,6 +9,8 @@
 #include <string.h>
 #define DEBUG
 
+typedef struct Type Type;
+
 typedef enum
 {
     TK_RESERVED, // punctuators or key words
@@ -44,13 +46,18 @@ typedef enum
     NK_LT,      // <  ### > ==> <
     NK_LE,      // <=
     NK_RETURN,  // "return"
-    NK_IDENT,   // id
+    NK_VAR,   // id
     NK_ASSIGN,  // =
     NK_IF,      //if
     NK_WHILE,   //while
     NK_FOR,     //for
     NK_BLOCK,   //block
     NK_FUNCTION,//funtion  
+    NK_DEREF,   //  &
+    NK_ADDR,    //  *
+    NK_PTR_ADD, //地址和int相加
+    NK_PTR_SUB, //地址和int相减
+    NK_PTR_DIFF,//地址和地址相减
 
 } NodeKind;
 /*************sym table*****************/
@@ -97,7 +104,7 @@ typedef struct Node Node;
 struct Node
 {
     NodeKind kind;
-
+    Type *type;
     Node *lhs;      //  left head side
     Node *rhs;      //  right head side
     Node *next;    //next state
@@ -120,6 +127,8 @@ struct Node
     //functioncall
     char *funcname;//used for function call
     Node *args;
+
+    Token *tok;
 };
 
 typedef struct Function Function;
@@ -152,6 +161,11 @@ typedef enum
     QK_LABEL,   //跳转标志
     QK_CALL,    //call function
     QK_PARAM,
+    QK_DEREF,
+    QK_ADDR,
+    QK_PTR_ADD,
+    QK_PTR_SUB,
+    QK_PTR_DIFF,
 } QuadKind;
 typedef struct Quad Quad;
 struct Quad
@@ -176,6 +190,15 @@ struct QuadSet
     QuadSet *next;
 };
 
+// type 
+
+typedef enum{TY_INT,TY_PTR} TypeKind;
+struct Type
+{
+    TypeKind kind;
+    int width;
+    Type *base;
+};
 
 //gobal var
 
@@ -194,13 +217,16 @@ extern QuadSet *quadset;
 
 // funtion of tokenize
 bool at_eof();
-bool consume(char* op);
-char *consume_ident();
-char *expect_ident();
+Token* consume(char* op);
+Token *consume_ident();
+Token *expect_ident();
+void error_tok(Token *tok, char *fmt, ...);
 
 int expect_num();
 void expect(char *op);
 Token *tokenize();
+
+char *strndup(const char *str, int len);
 
 //function of symtable
 Temp *new_temp();
@@ -218,3 +244,9 @@ void print_quadset();
 
 //funtion of codegen
 void gen_code();
+
+
+//type function
+bool is_integer(Type *ty);
+Type *point_to(Type *base);
+void add_type(Node *node);
