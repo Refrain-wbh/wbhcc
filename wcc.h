@@ -55,48 +55,40 @@ typedef enum
     NK_FUNCTION,//funtion  
     NK_DEREF,   //  &
     NK_ADDR,    //  *
+    NK_NULL,
     NK_PTR_ADD, //地址和int相加
     NK_PTR_SUB, //地址和int相减
     NK_PTR_DIFF,//地址和地址相减
 
 } NodeKind;
 /*************sym table*****************/
-
+typedef enum
+{
+    VK_CONST,
+    VK_LOCAL,
+    VK_TEMP,
+} VarKind;
 typedef struct Var Var;
 struct Var
 {
+    VarKind kind;
+    Type *type;
     Var *next;
-    char * name;
-    int offset;
     int reg;
-    int inmemory;
+    int offset;
+    int in_memory;
+    int no;
+    int val;
+    char *name;
 };
-// for params 
+
 typedef struct VarList VarList;
 struct VarList
 {
     Var *var;
     VarList *next;
 };
-typedef struct Temp Temp;
-struct Temp
-{
-    Temp *next;
-    int no;
-    int offset;
-    //for codegen use
-    int reg;//means a reg(index from 1),0 means not in a reg
-    int inmemory;//0 means not in memory ,others mean in memory
-};
 
-typedef struct ConstVal ConstVal;
-struct ConstVal
-{
-    ConstVal *next;
-    int val;
-    // for codegen use
-    int reg;//means a reg(index from 1),0 means not in a reg
-};
 
 
 // AST node
@@ -104,14 +96,11 @@ typedef struct Node Node;
 struct Node
 {
     NodeKind kind;
-    Type *type;
     Node *lhs;      //  left head side
     Node *rhs;      //  right head side
     Node *next;    //next state
-    ConstVal * constval;       //used if kind == ND_NUM
-    Temp *temp;     //used if kind is a operator
-    Var *var;
 
+    Var *var;
     //if  and while state
     Node *cond;
     Node * then;
@@ -127,6 +116,7 @@ struct Node
     //functioncall
     char *funcname;//used for function call
     Node *args;
+    Type *ret_type;
 
     Token *tok;
 };
@@ -136,13 +126,14 @@ struct Function
 {
     Node *node;
     Var *local;
+    Type *type;
     int local_size;
-    Temp *temp;
     Function *next;
     char *name;
     VarList *params;
 };
 
+extern Function *funcList;
 // quad node
 typedef enum
 {
@@ -163,18 +154,21 @@ typedef enum
     QK_PARAM,
     QK_DEREF,
     QK_ADDR,
-    QK_PTR_ADD,
-    QK_PTR_SUB,
-    QK_PTR_DIFF,
+    QK_INT2LONG,
 } QuadKind;
 typedef struct Quad Quad;
 struct Quad
 {
     QuadKind op;
-    Node *arg1;
-    Node *arg2;
-    Node *result;
+    Var *lhs;
+    Var *rhs;
+    Var *result;
+
     int label;
+    int param_no;
+    char *func_name;
+
+    
 };
 //mid code set
 typedef struct QuadSet QuadSet;
@@ -192,7 +186,7 @@ struct QuadSet
 
 // type 
 
-typedef enum{TY_INT,TY_PTR} TypeKind;
+typedef enum{TY_INT,TY_LONG,TY_PTR} TypeKind;
 struct Type
 {
     TypeKind kind;
@@ -200,6 +194,9 @@ struct Type
     Type *base;
 };
 
+extern Type *int_type;
+extern Type *long_type;
+extern Type *ptr_type;
 //gobal var
 
 extern Token *curtoken;
@@ -210,15 +207,16 @@ extern FILE *quadout;
 extern FILE *codeout;
 
 
-extern Node *ASTroot;
+
 extern QuadSet *quadset;
 
-
+extern Var *constList;
 
 // funtion of tokenize
 bool at_eof();
 Token* consume(char* op);
 Token *consume_ident();
+Token *peek(char *op);
 Token *expect_ident();
 void error_tok(Token *tok, char *fmt, ...);
 
@@ -229,13 +227,12 @@ Token *tokenize();
 char *strndup(const char *str, int len);
 
 //function of symtable
-Temp *new_temp();
-ConstVal *new_const();
-void print_tempaddr(FILE *out, Temp *temp);
+Var *new_const();
+
 
 //funtion of parse
 Function *program();
-
+Var *new_iconst(int val);
 
 
 //funtion of quadgen
@@ -248,5 +245,7 @@ void gen_code();
 
 //type function
 bool is_integer(Type *ty);
+bool is_pointer(Type *ty);
+bool is_same(Type*ty1,Type*ty2);
 Type *point_to(Type *base);
 void add_type(Node *node);

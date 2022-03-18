@@ -9,16 +9,7 @@ typedef enum
     RS_TMP,
     RS_LOCAL, // if content is local var
 } RvalKind;
-typedef struct Rvalue Rvalue;
-
-struct Rvalue
-{
-    RvalKind kind;
-    ConstVal *constval;
-    Temp *temp;
-    Var *local;
-};
-static const char *regname[] = {
+static const char *reg32[] = {
     "",
     "%eax",
     "%ebx",
@@ -35,7 +26,7 @@ static const char *regname[] = {
     "%r14d",
     "%r15d",
 };
-static const char *regname64[] = {
+static const char *reg64[] = {
     "",
     "%rax",
     "%rbx",
@@ -52,11 +43,10 @@ static const char *regname64[] = {
     "%r14",
     "%r15",
 };
-static char *argreg[] = {"%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
-static int eax = 1, edx = 4;
+static const char *arg_reg[] = {"","%edi", "%esi", "%edx", "%ecx", "%r8d", "%r9d"};
 
-static int regnum = sizeof(regname) / sizeof(regname[0]);
-static Rvalue rvalue[sizeof(regname) / sizeof(regname[0])];
+static const int reg_num = sizeof(reg32) / sizeof(reg32[0]);
+static Var * rvalue[sizeof(reg32) / sizeof(reg32[0])];
 #define ANY_REG -1
 #define MEMORY  0
 
@@ -64,130 +54,128 @@ static Rvalue rvalue[sizeof(regname) / sizeof(regname[0])];
 //根据一个有关运算的四元式，根据这个四元式分配寄存器
 //要注意到，op x,y 中x会被修改，并作为z(z=x op y)
 
-static int regidx(char *name)
+static int width(Var *var) { return var->type->width; }
+
+static int reg_index(const char * reg_name)
 {
-    for (int i = 1; i < regnum; ++i)
-        if (strcmp(name, regname[i]) == 0)
+    for (int i = 1; i < reg_num;i++)
+    {
+        if(strcmp(reg_name,reg32[i])==0 || strcmp(reg_name,reg64[i])==0)
             return i;
+    }
     return 0;
 }
-static int get_reg(Node *node)
+static const char * reg_name(int reg,int width)
 {
-    int regstate = 0;
-    if (node->kind == NK_NUM) // is const
-        regstate = node->constval->reg;
-    else if (node->kind == NK_VAR)
-        regstate = node->var->reg;
+    if(width==4)
+        return reg32[reg];
     else
-        regstate = node->temp->reg;
-    return regstate;
+        return reg64[reg];
 }
-//判断一个节点是否在寄存器中
-static bool inreg(Node *node)
-{
-    return get_reg(node) != 0;
-}
+
+static bool in_reg(Var *x);
+static int get_reg_index(Var *x);
+
+static bool disable_list[sizeof(reg32) / sizeof(reg32[0])];
+static void use(int reg) { disable_list[reg] = false; }
+static void not_use(int reg) { disable_list[reg] = true; }
+
 //判断一个寄存器内存储的值是否在内存中
-static bool inmemory(int reg)
+static bool in_memory(int reg)
 {
-    if (rvalue[reg].kind == RS_LOCAL)
-        return rvalue[reg].local->inmemory;
-    if (rvalue[reg].kind == RS_TMP)
-        return rvalue[reg].temp->inmemory;
-    return true;
+    if(rvalue[reg]==NULL)
+        return true;
+    if(rvalue[reg]->kind == VK_CONST)
+        return true;
+    else
+        return rvalue[reg]->in_memory;
 }
+static void keep_fit(Var * var){var->in_memory = true;}
+static void no_fit(Var *var) { var->in_memory = false; }
+
+
+static void gen_mem2reg(Var*var,int reg)
+{
+    if(width(var)==4)
+        print("\tmovl ");
+    else
+        print("\tmovq ");
+
+    const char *regname = reg_name(reg, width(var));
+    if (var->kind == VK_CONST)
+        print("$%d,%s\n", var->val, regname);
+    else 
+        print("-%d(%%rbp),%s\n", var->offset, regname);
+}
+static void gen_reg2mem(int reg,Var*var)
+{
+    if(width(var)==4)
+        print("\tmovl ");
+    else
+        print("\tmovq ");
+
+    const char *regname = reg_name(reg, width(var));
+    if (var->kind == VK_CONST)
+        return;
+    else
+        print("%s,-%d(%%rbp)\n", regname, var->offset);
+}
+
 //清空reg，以及对应的变量常量等表
 static void clear_reg(int reg)
 {
-    if (rvalue[reg].kind == RS_TMP)
-        rvalue[reg].temp->reg = 0;
-    else if (rvalue[reg].kind == RS_CONST)
-        rvalue[reg].constval->reg = 0;
-    else if (rvalue[reg].kind == RS_LOCAL)
-        rvalue[reg].local->reg = 0;
-
-    rvalue[reg].kind = RS_NULL;
+    rvalue[reg] = NULL;
 }
 //将寄存器中的内容存储到内存，生成对应指令，注意不会清空reg，但会设置inmemory
 //可能存在只想保存，但不想清空关系的情况
 static void store(int reg)
 {
-    if (rvalue[reg].kind == RS_TMP && rvalue[reg].temp->inmemory == 0)
-    {
-        int temp_offset = rvalue[reg].temp->offset;
-        print("\tmovl %s,-%d(%%rbp)\n", regname[reg], quadset->local_size + temp_offset);
-        rvalue[reg].temp->inmemory = 1;
-    }
+    if(in_memory(reg))
+        return;
 
-    if (rvalue[reg].kind == RS_LOCAL && rvalue[reg].local->inmemory == 0)
-    {
-        int local_offset = rvalue[reg].local->offset;
-        print("\tmovl %s,-%d(%%rbp)\n", regname[reg], local_offset);
-        rvalue[reg].local->inmemory = 1;
-    }
+    Var *var = rvalue[reg];
+    print("\tmov%s %s,-%d(%%rbp)\n",width(var)==4?"l":"q",
+          reg_name(reg, width(var)),
+          var->offset);
+    keep_fit(var);
 }
 static void store_if_islocal(int reg)
 {
-    if(rvalue[reg].kind == RS_LOCAL)
+    if(rvalue[reg]->kind == VK_LOCAL)
         store(reg);
 }
 //设置reg以及对应的变量常量等表
-static void set_reg(Node *node, int reg)
+static void set_reg(int reg,Var * var)
 {
-    clear_reg(reg);
-    int nodereg = get_reg(node);
-    clear_reg(nodereg);
-    if (node->kind == NK_NUM)
-    {
-        rvalue[reg].kind = RS_CONST;
-        rvalue[reg].constval = node->constval;
-        node->constval->reg = reg;
-    }
-    else if (node->kind == NK_VAR)
-    {
-        rvalue[reg].kind = RS_LOCAL;
-        rvalue[reg].local = node->var;
-        node->var->reg = reg;
-    }
-    else
-    {
-        rvalue[reg].kind = RS_TMP;
-        rvalue[reg].temp = node->temp;
-        node->temp->reg = reg;
-    }
+    rvalue[reg] = var;
 }
 //将内容从存储器中读入到reg中
-static void load(Node *node, int reg)
+static void load(Var * var, int reg)
 {
-    if (node->kind == NK_NUM)
-    {
-        print("\tmovl $%d,%s\n", node->constval->val, regname[reg]);
-    }
-    else if (node->kind == NK_VAR)
-    {
-        int local_offset = node->var->offset;
-        print("\tmovl -%d(%%rbp),%s\n", local_offset, regname[reg]);
-    }
+    int w = width(var);
+    const char *optype = w == 4 ? "l" : "q";
+    print("\tmov%s ", optype);
+
+    if(var->kind == VK_CONST)
+        print("$%d", var->val);
     else
-    {
-        int temp_offset = node->temp->offset;
-        print("\tmovl -%d(%%rbp),%s\n", quadset->local_size + temp_offset, regname[reg]);
-    }
+        print("-%d(%%rbp)", var->offset);
+    print(",%s\n", reg_name(reg, width(var)));
 }
 
 //分配一个寄存器，如果寄存器不空闲则还需要清空寄存器
+
 static int alloc_reg()
 {
-    for (int i = regnum-1; i >=1 ; --i)
-    {
-        if (rvalue[i].kind == RS_NULL)
+    for (int i = reg_num-1; i >=1 ; --i)
+        if (rvalue[i]==NULL)
             return i;
-    }
+    
     int idx;
     while (1)
     {
-        idx = rand() % regnum;
-        if (idx == 0 || rvalue[idx].kind == RS_NOTUSE)
+        idx = rand() % reg_num;
+        if (idx == 0 || disable_list[idx] == true)
             continue;
         else
             break;
@@ -199,98 +187,87 @@ static int alloc_reg()
 
 static void store_all_var()
 {
-    for (int i = 1; i < regnum;++i)
+    for (int i = 1; i < reg_num;++i)
     {
-        if(rvalue[i].kind == RS_LOCAL)
+        if(rvalue[i] && rvalue[i]->kind == VK_LOCAL)
         {
             store(i);
             clear_reg(i);
         }
     }
 }
-//将地址读入reg中
-static void get_addr(Node*node,int reg)
-{
-    if(node->kind == NK_VAR)
-    {
-        int local_offset = node->var->offset;
-        print("\tleaq -%d(%%rbp),%s\n", local_offset, regname64[reg]);
-        return;
-    }
-    error_tok(node->tok, "expected an var");
-}
-static void get_content(int addr_reg,int tar_reg)
-{
-    store_all_var();
-    print("\tmovl (%s),%s\n", regname64[addr_reg], regname[tar_reg]);
-}
-/*
-将arg1移动到reg1中 包括如此情况：
-两者均为有内容的，那么则表示将arg1移动到reg1中，如果arg1中本来就在另一个寄存器中，则
-表示在寄存器之间移动，如果不在寄存器中，则表示加载
-如果arg1为NULL，则表示将reg1清空
-如果reg1为空，则表示将arg1清空
-如果reg1为-1，则表示将arg1分配到任何一个寄存器中，如果在寄存器中，则不分配
-*/
 
-static void move_node(Node*node,int treg)
+
+//将var保存到指定寄存器，并保存对应寄存器的状态
+static void move_to_reg(Var * var,int reg)
 {
-    if(node)
+    if(reg == ANY_REG)
     {
-        int reg = get_reg(node);
-        if(reg == treg)
+        if(in_reg(var))
             return;
-        
-        if(treg == MEMORY)//则reg必然>0
-        {
-            store(reg);
-            clear_reg(reg);
-        }
-        else if(treg==ANY_REG)    
-        {
-            if(reg > 0)
-                return;
-            //否则表示，在内存中，要加载到任何一个寄存器中
-            reg = alloc_reg();
-            load(node, reg);
-            set_reg(node, reg);
-        }
-        else//有特定目标reg
-        {
-            store(treg);
-            clear_reg(treg);
-            if(reg>0)   //表示在不同reg之间切换
-            {
-                print("\tmovl %s,%s\n", regname[reg], regname[treg]);
-                clear_reg(reg);
-                set_reg(node, treg);
-            }
-            else 
-            {
-                load(node, treg);
-                set_reg(node, treg);
-            }
-        }
+        reg = alloc_reg();
+
     }
-    else //表示清空treg
+
+    int var_reg = get_reg_index(var);
+    if(var_reg==reg)
+        return;
+    else if(var_reg!=0)
     {
-        store(treg);
-        clear_reg(treg);
+        store(var_reg);
+        clear_reg(var_reg);
+        int w = width(var);
+        print("\tmov%s %s,%s\n", (w == 4 ? "l" : "q"),
+              reg_name(var_reg, w),
+              reg_name(reg, w));
+        set_reg(reg, var);
+    }
+    else 
+    {
+        store(reg);
+        clear_reg(reg);
+        load(var, reg);
+        set_reg(reg, var);
+    }
+}
+//将var保存到指定寄存器，并保存对应寄存器的状态
+static void move_to_reg_np(Var * var,int reg)
+{
+    if(reg == ANY_REG)
+    {
+        if(in_reg(var))
+            return;
+        reg = alloc_reg();
+
+    }
+
+    int var_reg = get_reg_index(var);
+    if(var_reg==reg)
+        return;
+    else if(var_reg!=0)
+    {
+        store(var_reg);
+        clear_reg(var_reg);
+        set_reg(reg, var);
+    }
+    else 
+    {
+        store(reg);
+        clear_reg(reg);
+        set_reg(reg, var);
     }
 }
 
-static void move_2node(Node*arg1,int reg1,Node*arg2,int reg2)
-{
-    move_node(arg1,reg1);
-    int temp=rvalue[reg1].kind;
-    rvalue[reg1].kind = RS_NOTUSE;
-    move_node(arg2, reg2);
-    rvalue[reg1].kind = temp;
-}
 static void drop_if_istemp(int reg)
 {
-    if(rvalue[reg].kind == RS_TMP)
+    if(reg==0)
+        return;
+    if(rvalue[reg]->kind == VK_TEMP)
         clear_reg(reg);
+}
+static void drop(int reg)
+{
+    clear_reg(reg);
 }
 
 //
@@ -319,48 +296,92 @@ static void drop_if_istemp(int reg)
 
  *
  */
+//如果x在reg中，生成寄存器名，如果在内存中，则生成地址
+static int get_reg_index(Var *x)
+{
+    for (int i = 1; i < reg_num;++i)
+        if(x == rvalue[i])
+            return i;
+    return 0;
+}
+static const char * get_reg_name(Var * x)
+{
+    int reg = get_reg_index(x);
+    if(reg == 0)
+        return NULL;
+    return reg_name(reg, width(x));
+}
+static bool in_reg(Var * x)
+{
+    return get_reg_index(x) != 0;
+}
+
+void gen_location(Var * x)
+{
+    if(in_reg(x))
+        print("%s", get_reg_name(x));
+    else if(x->kind == VK_CONST)
+        print("$%d",x->val);
+    else
+        print("-%d(%%rbp)", x->offset);
+}
+
+void gen_binary(const char * op,Var * x,Var * y)
+{
+    const char *optype = width(y) == 4 ? "l" : "q";
+    print("\t%s%s ", op, optype);
+    gen_location(x);
+    print(",");
+    gen_location(y);
+    print("\n");
+}
+
 //生成2操作数的运算代码
+// subl ax,bx  := bx = bx - ax
 void gen_2operate_code(Quad *quad)
 {
-    move_2node(quad->arg1, ANY_REG, quad->arg2, ANY_REG);
-    // from now  x y reg is set sucess both cotain the right val
-    
-    int regx = get_reg(quad->arg1), regy = get_reg(quad->arg2);
-    
-    //修改寄存器状态，设置结果保存的位置 由于生成的必然是临时变量，故可以不保存
-    if (rvalue[regx].kind == RS_LOCAL)
-        store(regx);
+    const char *op = NULL;
     switch (quad->op)
     {
     case QK_ADD:
-        print("\taddl %s,%s\n", regname[regy], regname[regx]);
+        op = "add";
         break;
     case QK_SUB:
-        print("\tsubl %s,%s\n", regname[regy], regname[regx]);
+        op = "sub";
         break;
     case QK_MUL:
-        print("\timull %s,%s\n", regname[regy], regname[regx]);
+        op = "imul";
         break;
     default:
         break;
     }
 
-    set_reg(quad->result, regx);
-    //如果是第二个操作数是临时变量，则可以直接丢弃
-    drop_if_istemp(regy);
+    move_to_reg(quad->lhs, ANY_REG);
+    gen_binary(op, quad->rhs, quad->lhs);
+
+    int l_reg = get_reg_index(quad->lhs), r_reg = get_reg_index(quad->rhs);
+    drop(l_reg), drop(r_reg);
+    set_reg(l_reg, quad->result);
 }
 
 //将比较结果统一放在eax中,因此需要对eax进行清空处理等
 void gen_cmp_code(Quad *quad)
 {
-    move_2node(quad->arg1, ANY_REG, quad->arg2, ANY_REG);
-    // from now  x y reg is set sucess
-    int regx = get_reg(quad->arg1), regy = get_reg(quad->arg2);
-    //clear eax for store
-    store(eax);
-    clear_reg(eax);
+    int eax = reg_index("%eax");
 
-    print("\tcmpl %s,%s\n", regname[regy], regname[regx]);
+    if(!in_reg(quad->lhs) && !in_reg(quad->rhs))
+        move_to_reg(quad->lhs, ANY_REG);
+    int r_reg = get_reg_index(quad->rhs),l_reg=get_reg_index(quad->lhs);
+
+    gen_binary("cmp", quad->rhs, quad->lhs);
+
+    drop(l_reg), drop(r_reg);
+
+    //然后清空eax，为结果留下空间
+    store(eax);    
+    clear_reg(eax);
+    set_reg(eax,quad->result);
+
     switch (quad->op)
     {
     case QK_EQ:
@@ -379,12 +400,7 @@ void gen_cmp_code(Quad *quad)
         break;
     }
     print("\tmovsbl %%al,%%eax\n");
-
     
-    drop_if_istemp(regx);
-    drop_if_istemp(regy);
-    //然后清空eax，为结果留下空间
-    set_reg(quad->result, eax);
 }
 
 //由于除法指令需要保证[edx;eax]为被除数，所以没有和上文统一格式，因而单独生成
@@ -392,26 +408,25 @@ void gen_cmp_code(Quad *quad)
 //所以这里会进行一系列整除和商的运算
 void gen_div_code(Quad *quad)
 {
-    move_2node(quad->arg1, eax, NULL, edx);
-    int eaxrs = rvalue[eax].kind, edxrs = rvalue[edx].kind;
-    rvalue[eax].kind = RS_NOTUSE, rvalue[edx].kind = RS_NOTUSE;
-    move_node(quad->arg2, ANY_REG);
-    rvalue[eax].kind = eaxrs, rvalue[edx].kind = edxrs;
-    
-    int regy = get_reg(quad->arg2);
+    int eax = reg_index("%eax"), edx = reg_index("%edx");
 
-    if(rvalue[eax].kind == RS_LOCAL)
-        store(eax);
+    store(eax), clear_reg(eax);
+    store(edx), clear_reg(edx);
 
-    print("\tcltd\n");
-    print("\tidivl %s\n", regname[regy]);
+    not_use(eax), not_use(edx);
 
+    move_to_reg(quad->lhs, eax);
+    move_to_reg(quad->rhs, ANY_REG);
 
-    if (quad->op == QK_DIV)
-        set_reg(quad->result, eax);
+    int w = width(quad->lhs);
+    print("\t%s\n", w == 4 ? "cltd" : "cqto");
+    print("\tidiv%s %s\n",w==4?"l":"q", get_reg_name(quad->rhs));
+    set_reg(eax,quad->result);
 
-    //如果除数为临时变量，则直接丢弃
-    drop_if_istemp(regy);
+    use(eax), use(edx);
+
+    drop(get_reg_index(quad->lhs));
+    drop(get_reg_index(quad->rhs));
 }
 
 /*
@@ -420,34 +435,40 @@ return生成思路：因为需要保存在eax中，所以需要将表达式的�
 然后将表达式移动或者加载到eax中*/
 void gen_return_code(Quad *quad)
 {
-    move_node(quad->arg1, eax);
+    int eax = reg_index("%eax");
+    move_to_reg(quad->lhs, eax);
     print("\tjmp .L.return.%s\n", quadset->name);
-    drop_if_istemp(eax);
+    drop(eax);
 }
 
+
+// 统一，右边部分是地址，左边部分是值，因而是对内存地址直接赋值
 void gen_assign_code(Quad *quad)
 {
-    Node *source = quad->arg1, *target = quad->result;
-    // target 必定是indentity 因而此时有local发生修改，注意修改inmemory的标志
-    move_node(source, ANY_REG);
-    int sreg = get_reg(source);
-    set_reg(quad->result, sreg);
-    int treg = sreg;
-    // target 内容已经发生改变，需要更新inmemory
-    rvalue[treg].local->inmemory = 0;
+    move_to_reg(quad->lhs, ANY_REG);
+    int sreg = get_reg_index(quad->lhs);
+    not_use(sreg);
+    move_to_reg(quad->result, ANY_REG);
+    use(sreg);
+    int treg = get_reg_index(quad->result);
+
+    int w = width(quad->lhs);
+    print("\tmov%s %s,(%s)\n", w == 4 ? "l" : "q", get_reg_name(quad->lhs),
+          get_reg_name(quad->result));
+    
+    drop(sreg);
+    drop(treg);
 }
 
 void gen_jump_code(Quad*quad)
 {
-
     switch (quad->op)
     {
     case QK_JEZ:
     {
-        move_node(quad->arg1, ANY_REG);
-        int reg = get_reg(quad->arg1);
-        clear_reg(reg);
-        print("\tcmpl $0,%s\n", regname[reg]);
+        move_to_reg(quad->lhs, ANY_REG);
+        gen_binary("cmp", new_iconst(0), quad->lhs);
+        drop(get_reg_index(quad->lhs));
         print("\tje .L%d\n", quad->label);
         break;
     }
@@ -460,44 +481,54 @@ void gen_jump_code(Quad*quad)
 }
 void gen_call_code(Quad * quad)
 {
-    //权且采用一种简单的方式，如果是变量或者是临时变量都保存下来
-    for (int reg = 1; reg < regnum;++reg)
+    for (int i = 1; i < reg_num;++i)
     {
-        store(reg);
-        clear_reg(reg);
+        store(i);
+        clear_reg(i);
     }
-    Node *func = quad->result;
-    int argno=0;
-    for (Node *argnode = func->args; argnode;argnode=argnode->next)
-    {
-        int reg = regidx(argreg[argno]);
-        load(argnode, reg);
-        set_reg(argnode,reg);
-        argno++;
-        if (argno >= 6)
-            break;
-    }
-    print("\tcall %s\n", func->funcname);
+    int eax = reg_index("%eax");
+    print("\tcall %s\n", quad->func_name);
     //记得返回值和func绑定，func节点拥有一个temp位置
-    set_reg(func, eax);
+    set_reg(eax,quad->result);
 }
-void gen_get_addr_code(Quad*quad)
+void gen_deref(Quad * quad)
 {
+    int w = width(quad->result);
+    move_to_reg(quad->lhs, ANY_REG);
+    int s_reg = get_reg_index(quad->lhs);
 
+    print("\tmov%s (%s),%s\n", w == 4 ? "l" : "q",
+              get_reg_name(quad->lhs),
+              reg_name(s_reg,w));
+              
+    set_reg(s_reg, quad->result);
+}
+static void gen_get_addr(Quad * quad)
+{
+    move_to_reg_np(quad->result, ANY_REG);
+    print("\tleaq -%d(%%rbp),%s\n", quad->lhs->offset, get_reg_name(quad->result));
+}
+void gen_int2long(Quad * quad)
+{
+    move_to_reg(quad->lhs,ANY_REG);
+    int reg = get_reg_index(quad->lhs);
+    print("\tmovslq %s,%s\n", reg32[reg], reg64[reg]);
+    
+    set_reg(reg, quad->result);
 }
 //初始化函数参数，将其与寄存器关联起来
 void init_func_params()
 {
-    int paramidx = 0;
+    int param_index = 1;
     for (VarList *params = quadset->params; params;params = params->next)
     {
         Var *param = params->var;
         //将其与寄存器关联起来
-        int reg = regidx(argreg[paramidx]);
-        rvalue[reg].kind = RS_LOCAL;
-        rvalue[reg].local = param;
-        param->reg = reg;
-        paramidx++;
+        int reg = reg_index(arg_reg[param_index]);
+        set_reg(reg, param);
+        store(reg);
+        clear_reg(reg);
+        param_index++;
     }
 }
 void gen_funcion()
@@ -515,6 +546,7 @@ void gen_funcion()
     init_func_params();
     for (int i = 0; i < quadset->size; ++i)
     {
+        print("\n");
         Quad *quad = &quadset->list[i];
         switch (quad->op)
         {
@@ -543,57 +575,25 @@ void gen_funcion()
             break;
         case QK_JMP:
         case QK_JEZ:
-            store_all_var();
             gen_jump_code(quad);
             break;
         case QK_LABEL:
-            store_all_var();
             print(".L%d:\n", quad->label);
+            break;
+        case QK_PARAM:
+            move_to_reg(quad->lhs, reg_index(arg_reg[quad->param_no]));
             break;
         case QK_CALL:
             gen_call_code(quad);
             break;
         case QK_DEREF:
-        {
-            if(!inreg(quad->result))
-            {
-                set_reg(quad->result, alloc_reg());
-            }
-            move_node(quad->arg1, ANY_REG);
-            int treg = get_reg(quad->result), sreg = get_reg(quad->arg1);
-            get_content(sreg,treg);
-            drop_if_istemp(sreg);
+            gen_deref(quad);
             break;
-        }
         case QK_ADDR:
-        {
-            if(!inreg(quad->result))
-            {
-                int reg = alloc_reg();
-                set_reg(quad->result, reg);
-            }
-            int reg = get_reg(quad->result);
-            get_addr(quad->arg1, reg);
+            gen_get_addr(quad);
             break;
-        }
-        case QK_PTR_ADD:
-        case QK_PTR_SUB:
-        {
-            Node*arg1=quad->arg1,*arg2=quad->arg2;
-            if(is_integer(arg1->kind))
-            {
-                Node *t = arg1;
-                arg1 = arg2;
-                arg2 = t;
-            }
-            
-            move_2node(arg1, ANY_REG, arg2, ANY_REG);
-            int regx = get_reg(arg1), regy = get_reg(arg2);
-            store_if_islocal(regy);
-            print("\timul %d,%s",)
-            break;
-        }
-
+        case QK_INT2LONG:
+            gen_int2long(quad);
         default:
             break;
         }
@@ -606,16 +606,11 @@ void gen_funcion()
     print("\tret\n");
 
     //清空所有的reg
-    for (int i = 1; i < regnum;++i)
+    for (int i = 1; i < reg_num;++i)
         clear_reg(i);
 }
 void gen_code()
 {
-#ifdef DEBUG 
-    assert(strcmp(regname[edx], "%edx") == 0);
-    assert(strcmp(regname[eax], "%eax") == 0);
-#endif
-
     while(quadset)
     {
         gen_funcion();

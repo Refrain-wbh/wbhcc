@@ -27,7 +27,6 @@ int main(int argc, char **argv)
     curtoken = tokenList;
     Function * funclist = program();
     quadset = gen_quadsets(funclist);
-    print_quadset();
     gen_code();
     // printf(".intel_syntax noprefix\n");
     // printf(".global main\n");

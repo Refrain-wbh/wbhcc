@@ -1,24 +1,27 @@
 #include"wcc.h"
 
-static Var *local;
+static Var *localList;
 static int local_offset;
-static Temp *temp;
-static ConstVal *constval;
+Function *funcList;
+Var *constList;
 
 /*####################parse##################*/
 static Var *find_var(Token*tok);
-static Var *new_ivar(Token*tok);
+static Var *new_var(Type* type,Token*tok);
+Var *new_iconst(int val);
+static Function *find_func(Token *tok);
 
 static Node *new_node(NodeKind kind,Token*tok);
-static Node *new_num(long val);
-static Node *new_binary_op(NodeKind kind, Node *lhs, Node *rhs,Token*tok);
+static Node *new_num(int val);
+static Node *new_binary(NodeKind kind, Node *lhs, Node *rhs,Token*tok);
 static Node *new_unary(NodeKind kind,Node*expr,Token*tok);
-static Node *new_unary_op(NodeKind kind, Node *expr, Token *tok);
 static Node *new_ident(Var *var,Token*tok);
 
 Function *program();
 static Function *function();
 static VarList *func_params();
+static Type *basetype();
+static Node *declaration();
 static Node *args();
 static Node *stmt();
 static Node *expr();
@@ -34,32 +37,36 @@ static Node *primary();
 // program := function*
 Function * program()
 {
-    Function func = {};
-    Function *cur = &func;
     while(!at_eof())
     {
-        cur->next = function();
-        cur = cur->next;
-        add_type(cur->node);
+        Function *func = function();
     }
-    return func.next;
+    return funcList;
 }
-// function := ident "(" func_params? ")" "{" stmt* "}"
+// function := basetype ident "(" func_params? ")" "{" stmt* "}"
 Function *function()
 {
-    local = NULL;
-    temp = NULL;
+    localList = NULL;
     local_offset = 0;
 
     Node head = {};
     Node *cur = &head;
-    
+
+    Type *type = basetype();
     Token * ident = expect_ident();
     VarList *params = NULL;
     expect("(");
     if(!consume(")"))
         params = func_params();
     
+    Function *func = calloc(1, sizeof(Function));
+    func->name = strndup(ident->str,ident->strlen);
+    func->params = params;
+    func->type = type;
+    
+    func->next = funcList;
+    funcList = func;
+
     expect("{");
     
     while(!consume("}"))
@@ -68,30 +75,37 @@ Function *function()
         cur = cur->next;
     }
 
-    
-    Function *func = calloc(1, sizeof(Function));
-    func->name = strndup(ident->str,ident->strlen);
     func->node = head.next;
-    func->local = local;
-    func->temp = temp;
+    func->local = localList;
     func->local_size = local_offset;
-    func->params = params;
+
     return func;
 }
-// func_params := ident(,ident)*
+//basetype := "int" "*"*
+static Type * basetype()
+{
+    expect("int");
+    Type * ty = int_type;
+    while(consume("*"))
+        ty = point_to(ty);
+    return ty;
+}
+// func_params := basetype ident(,basetype ident)*
 static VarList * func_params()
 {
     VarList *params = calloc (1, sizeof(VarList));
     VarList *cur = params;
-    
-    cur->var = new_ivar(expect_ident());
+
+    Type *ty = basetype();
+    cur->var = new_var(ty,expect_ident());
     
     while(!consume(")"))
     {
         expect(",");
         cur->next = calloc(1, sizeof(VarList));
         cur = cur->next;
-        cur->var = new_ivar(expect_ident());
+        ty = basetype();
+        cur->var = new_var(ty,expect_ident());
     }
 
     return params;
@@ -103,6 +117,7 @@ static VarList * func_params()
 //       |  "for" "(" expr? ";" expr? ";" expr? ";" ")"stmt
 //       | "return" expr ";"
 //       | "{" stmt* "}"
+//       | declaration
 static Node*stmt()
 {
     Token *tok;
@@ -167,9 +182,28 @@ static Node*stmt()
         node->body = head.next;
         return node;
     }
+    if(peek("int"))
+        return declaration();
     Node *node = expr();
     expect(";");
     return node;
+}
+// declaration := int ident ("=" expr)";"
+static Node * declaration()
+{
+    Token *tok;
+    Type *type = basetype();
+    Var * lvar = new_var(type, tok = expect_ident());
+
+    if (consume(";"))
+    {
+        return new_node(NK_NULL, tok);
+    }
+    Node *lnode = new_ident(lvar, tok);
+    expect("=");
+    Node *rnode = expr();
+    expect(";");
+    return new_binary(NK_ASSIGN, lnode, rnode, tok);
 }
 
 // expr := assign
@@ -183,7 +217,7 @@ static Node * assign()
     Node *node = equality();
     Token *tok;
     if(tok=consume("="))
-        return new_binary_op(NK_ASSIGN, node, assign(),tok);
+        return new_binary(NK_ASSIGN, node, assign(),tok);
     
     return node;
 }
@@ -196,9 +230,9 @@ static Node * equality()
     {
         Token *tok;
         if(tok=consume("=="))
-            node = new_binary_op(NK_EQ, node, relational(),tok);
+            node = new_binary(NK_EQ, node, relational(),tok);
         else if(tok=consume("!="))
-            node = new_binary_op(NK_NE, node, relational(),tok);
+            node = new_binary(NK_NE, node, relational(),tok);
         else 
             return node;
     }
@@ -211,44 +245,16 @@ static Node * relational()
     {
         Token *tok;
         if(tok=consume("<="))
-            node = new_binary_op(NK_LE, node, add(),tok);
+            node = new_binary(NK_LE, node, add(),tok);
         else if(tok=consume(">="))
-            node = new_binary_op(NK_LE, add(), node,tok);
+            node = new_binary(NK_LE, add(), node,tok);
         else if(tok=consume("<"))
-            node = new_binary_op(NK_LT, node, add(),tok);
+            node = new_binary(NK_LT, node, add(),tok);
         else if(tok=consume(">"))
-            node = new_binary_op(NK_LT, add(), node,tok);
+            node = new_binary(NK_LT, add(), node,tok);
         else
             return node;
     }
-}
-
-static Node*new_add(Node* arg1,Node*arg2,Token*tok)
-{
-    add_type(arg1);
-    add_type(arg2);
-
-    if(is_integer(arg1)&&is_integer(arg2))
-        return new_binary_op(NK_ADD, arg1, arg2, tok);
-    if(is_integer(arg1)&&arg2->type->base)
-        return new_binary_op(NK_PTR_ADD, arg1, arg2, tok);
-    if(is_integer(arg2)&&arg1->type->base)
-        return new_binary_op(NK_PTR_ADD, arg1, arg2, tok);
-    error_tok(tok, "invalid operands");
-}
-
-static Node*new_sub(Node* arg1,Node*arg2,Token*tok)
-{
-    add_type(arg1);
-    add_type(arg2);
-
-    if(is_integer(arg1)&&is_integer(arg2))
-        return new_binary_op(NK_SUB, arg1, arg2, tok);
-    if(arg1->type->base&&arg2->type->base)
-        return new_binary_op(NK_PTR_DIFF, arg1, arg2, tok);
-    if(arg1->type->base&&is_integer(arg2->type))
-        return new_binary_op(NK_PTR_SUB, arg1, arg2, tok);
-    error_tok(tok, "invalid operands");
 }
 //add:=mul("+" mul | "-" mul)*
 static Node *add()    
@@ -258,9 +264,9 @@ static Node *add()
     {
         Token *tok;
         if(tok=consume("+"))
-            node=new_add(node,mul(),tok);
+            node = new_binary(NK_ADD, node, mul(), tok);
         else if(tok=consume("-"))
-            node = new_sub(node,mul(),tok);
+            node = new_binary(NK_SUB, node, mul(), tok);
         else
             return node;
     }
@@ -274,9 +280,9 @@ static Node * mul()
     {
         Token *tok;
         if(tok=consume("*"))
-            node = new_binary_op(NK_MUL, node, unary(),tok);
+            node = new_binary(NK_MUL, node, unary(),tok);
         else if(tok=consume("/"))
-            node = new_binary_op(NK_DIV, node, unary(),tok);
+            node = new_binary(NK_DIV, node, unary(),tok);
         else
             return node;
     }
@@ -290,11 +296,11 @@ static Node*unary()
     if(consume("+"))
         return unary();
     if(tok=consume("-"))
-        return new_binary_op(NK_SUB, new_num(0), unary(),tok);
+        return new_binary(NK_SUB, new_num(0), unary(),tok);
     if(tok=consume("*"))
-        return new_unary_op(NK_DEREF, unary(),tok);
+        return new_unary(NK_DEREF, unary(),tok);
     if(tok=consume("&"))
-        return new_unary_op(NK_ADDR, unary(),tok);
+        return new_unary(NK_ADDR, unary(),tok);
     return primary();
 }
 //  args:= "(" ( assign  ("," assign)* )? ")"
@@ -329,14 +335,18 @@ static Node * primary()
         if(consume("("))//means it is a function
         {
             Node *node = new_node(NK_FUNCTION,tok);
-            node->temp = new_temp();
+            Function *func = find_func(tok);
+            if(func==NULL)
+                error_tok(tok, "Undeclared function");
+
+            node->ret_type = func->type;
             node->funcname = strndup(tok->str, tok->strlen);
             node->args = args();
             return node;
         }
         Var *var = find_var(tok);
         if(var==NULL)
-            var = new_ivar(tok);
+            error_tok(tok, "undefined variable");
         return new_ident(var,tok);
     }
     return new_num(expect_num());
@@ -353,20 +363,18 @@ static Node *new_node(NodeKind kind,Token*tok)
 }
 
 //calloc one AST Node for integer num
-static Node * new_num(long val)
+static Node * new_num(int val)
 {
     Node *node = new_node(NK_NUM,NULL);
-    node->constval = new_const();
-    node->constval->val = val;
+    node->var = new_iconst(val);
     return node;
 }
 //calloc one AST Node for two-operand operator 
-static Node * new_binary_op(NodeKind kind,Node*lhs,Node*rhs,Token*tok)
+static Node * new_binary(NodeKind kind,Node*lhs,Node*rhs,Token*tok)
 {
     Node *node = new_node(kind,tok);
     node->lhs = lhs;
     node->rhs = rhs;
-    node->temp = new_temp();
     return node;
 }
 static Node *new_unary(NodeKind kind,Node*expr,Token*tok)
@@ -376,13 +384,6 @@ static Node *new_unary(NodeKind kind,Node*expr,Token*tok)
     return node;
 }
 
-static Node *new_unary_op(NodeKind kind,Node*expr,Token*tok)
-{
-    Node *node = new_node(kind,tok);
-    node->lhs = expr;
-    node->temp = new_temp();
-    return node;
-}
 static Node *new_ident(Var * var,Token*tok)
 {
     Node *node = new_node(NK_VAR,tok);
@@ -390,42 +391,54 @@ static Node *new_ident(Var * var,Token*tok)
     return node;
 }
 
-
 static Var *find_var(Token*tok)
 {
-    for (Var *var = local; var;var=var->next)
+    for (Var *var = localList; var;var=var->next)
         if(tok->strlen==strlen(var->name) && 
             strncmp(var->name,tok->str,tok->strlen)==0)
             return var;
     return NULL;
 }
-static Var *new_ivar(Token*tok)
+static Var *new_var(Type* type,Token*tok)
 {
     
     Var *var = calloc(1, sizeof(Var));
+    var->kind = VK_LOCAL;
+    var->type = type;
     var->name = strndup(tok->str,tok->strlen);
-    var->next = local;
-    local_offset += 4;
+    var->next = localList;
+    local_offset += type->width;
     var->offset = local_offset;
-    local = var;
+    localList = var;
     return var;
 }
 
-Temp *new_temp()
+static Var *find_iconst(int val)
 {
-    static int tempnum = 0;
-    Temp *newnode = calloc(1, sizeof(Temp));
-    newnode->next = temp;
-    temp = newnode;
-    temp->no = tempnum++;
-    return temp;
+    for (Var *var = constList; var; var=var->next)
+        if(var->val == val)
+            return var;
+    return NULL;
 }
-
-ConstVal *new_const()
+static Function *find_func(Token *tok)
 {
-    ConstVal *newnode = calloc(1, sizeof(ConstVal));
-    newnode->next = constval;
-    constval = newnode;
-    return constval;
+    for (Function *func = funcList; func;func=func->next)
+        if(tok->strlen==strlen(func->name) && 
+            strncmp(func->name,tok->str,tok->strlen)==0)
+            return func;
+    return NULL;
+}
+Var *new_iconst(int val)
+{
+    Var *newnode = find_iconst(val);
+    if(newnode)
+        return newnode;
+    newnode = calloc(1, sizeof(Var));
+    newnode->kind = VK_CONST;
+    newnode->next = constList;
+    newnode->val = val;
+    newnode->type = int_type;
+    constList = newnode;
+    return newnode;
 }
 
