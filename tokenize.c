@@ -78,6 +78,13 @@ Token* consume(char *op)
     curtoken = curtoken->next;
     return t;
 }
+Token * peek(char * op)
+{
+    if(curtoken->kind!=TK_RESERVED|| strlen(op)!=curtoken->strlen ||   
+                strncmp(curtoken->str,op,curtoken->strlen))
+        return NULL;
+    return curtoken;
+}
 Token*consume_ident()
 {
     if(curtoken->kind!=TK_IDENT)
@@ -95,7 +102,7 @@ bool startwith(const char * p,const char * q)
 const char *start_with_reserved(const char *p)
 { 
     //关键字识别
-    static const char *keys[] = {"return","if","else","while","for"};
+    static const char *keys[] = {"return","if","else","while","for","int"};
     static const int keyscount = sizeof(keys)/ sizeof(keys[0]);
     for (int i = 0; i < keyscount; ++i)
     {
