@@ -10,13 +10,13 @@ void error(char * fmt,...)
 void verror_at(char *loc,char *fmt,va_list ap)
 {
     char *startp = loc, *endp = loc;
-    while (startp > user_input && *(startp - 1) == '\n')
+    while (startp > user_input && *(startp - 1) != '\n')
         startp--;
     while(*endp!='\0'&&*endp!='\n')
         endp++;
 
     fprintf(errout, "%.*s\n", (int)(endp - startp), startp);
-    fprintf(errout,"%.*s^ ",(int)(loc-startp),"");
+    fprintf(errout,"%*s^ ",(int)(loc-startp),"");
     vfprintf(errout, fmt, ap);
     fprintf(errout, "\n");
     exit(1);

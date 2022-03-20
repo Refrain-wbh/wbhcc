@@ -54,7 +54,7 @@ static Var * rvalue[sizeof(reg32) / sizeof(reg32[0])];
 //根据一个有关运算的四元式，根据这个四元式分配寄存器
 //要注意到，op x,y 中x会被修改，并作为z(z=x op y)
 
-static int width(Var *var) { return var->type->width; }
+static int get_size(Var *var) { return var->type->size; }
 
 static int reg_index(const char * reg_name)
 {
@@ -65,9 +65,9 @@ static int reg_index(const char * reg_name)
     }
     return 0;
 }
-static const char * reg_name(int reg,int width)
+static const char * reg_name(int reg,int size)
 {
-    if(width==4)
+    if(size==4)
         return reg32[reg];
     else
         return reg64[reg];
@@ -96,12 +96,12 @@ static void no_fit(Var *var) { var->in_memory = false; }
 
 static void gen_mem2reg(Var*var,int reg)
 {
-    if(width(var)==4)
+    if(get_size(var)==4)
         print("\tmovl ");
     else
         print("\tmovq ");
 
-    const char *regname = reg_name(reg, width(var));
+    const char *regname = reg_name(reg, get_size(var));
     if (var->kind == VK_CONST)
         print("$%d,%s\n", var->val, regname);
     else 
@@ -109,12 +109,12 @@ static void gen_mem2reg(Var*var,int reg)
 }
 static void gen_reg2mem(int reg,Var*var)
 {
-    if(width(var)==4)
+    if(get_size(var)==4)
         print("\tmovl ");
     else
         print("\tmovq ");
 
-    const char *regname = reg_name(reg, width(var));
+    const char *regname = reg_name(reg, get_size(var));
     if (var->kind == VK_CONST)
         return;
     else
@@ -134,8 +134,8 @@ static void store(int reg)
         return;
 
     Var *var = rvalue[reg];
-    print("\tmov%s %s,-%d(%%rbp)\n",width(var)==4?"l":"q",
-          reg_name(reg, width(var)),
+    print("\tmov%s %s,-%d(%%rbp)\n",get_size(var)==4?"l":"q",
+          reg_name(reg, get_size(var)),
           var->offset);
     keep_fit(var);
 }
@@ -152,7 +152,7 @@ static void set_reg(int reg,Var * var)
 //将内容从存储器中读入到reg中
 static void load(Var * var, int reg)
 {
-    int w = width(var);
+    int w = get_size(var);
     const char *optype = w == 4 ? "l" : "q";
     print("\tmov%s ", optype);
 
@@ -160,7 +160,7 @@ static void load(Var * var, int reg)
         print("$%d", var->val);
     else
         print("-%d(%%rbp)", var->offset);
-    print(",%s\n", reg_name(reg, width(var)));
+    print(",%s\n", reg_name(reg, get_size(var)));
 }
 
 //分配一个寄存器，如果寄存器不空闲则还需要清空寄存器
@@ -216,7 +216,7 @@ static void move_to_reg(Var * var,int reg)
     {
         store(var_reg);
         clear_reg(var_reg);
-        int w = width(var);
+        int w = get_size(var);
         print("\tmov%s %s,%s\n", (w == 4 ? "l" : "q"),
               reg_name(var_reg, w),
               reg_name(reg, w));
@@ -309,7 +309,7 @@ static const char * get_reg_name(Var * x)
     int reg = get_reg_index(x);
     if(reg == 0)
         return NULL;
-    return reg_name(reg, width(x));
+    return reg_name(reg, get_size(x));
 }
 static bool in_reg(Var * x)
 {
@@ -328,7 +328,7 @@ void gen_location(Var * x)
 
 void gen_binary(const char * op,Var * x,Var * y)
 {
-    const char *optype = width(y) == 4 ? "l" : "q";
+    const char *optype = get_size(y) == 4 ? "l" : "q";
     print("\t%s%s ", op, optype);
     gen_location(x);
     print(",");
@@ -418,7 +418,7 @@ void gen_div_code(Quad *quad)
     move_to_reg(quad->lhs, eax);
     move_to_reg(quad->rhs, ANY_REG);
 
-    int w = width(quad->lhs);
+    int w = get_size(quad->lhs);
     print("\t%s\n", w == 4 ? "cltd" : "cqto");
     print("\tidiv%s %s\n",w==4?"l":"q", get_reg_name(quad->rhs));
     set_reg(eax,quad->result);
@@ -452,12 +452,11 @@ void gen_assign_code(Quad *quad)
     use(sreg);
     int treg = get_reg_index(quad->result);
 
-    int w = width(quad->lhs);
+    int w = get_size(quad->lhs);
     print("\tmov%s %s,(%s)\n", w == 4 ? "l" : "q", get_reg_name(quad->lhs),
           get_reg_name(quad->result));
     
     drop(sreg);
-    drop(treg);
 }
 
 void gen_jump_code(Quad*quad)
@@ -493,7 +492,7 @@ void gen_call_code(Quad * quad)
 }
 void gen_deref(Quad * quad)
 {
-    int w = width(quad->result);
+    int w = get_size(quad->result);
     move_to_reg(quad->lhs, ANY_REG);
     int s_reg = get_reg_index(quad->lhs);
 
@@ -516,6 +515,7 @@ void gen_int2long(Quad * quad)
     
     set_reg(reg, quad->result);
 }
+
 //初始化函数参数，将其与寄存器关联起来
 void init_func_params()
 {

@@ -21,6 +21,7 @@ Function *program();
 static Function *function();
 static VarList *func_params();
 static Type *basetype();
+static Type *read_type_suffix(Type *base);
 static Node *declaration();
 static Node *args();
 static Node *stmt();
@@ -32,7 +33,7 @@ static Node *mul();
 static Node * unary();
 static Node *add();
 static Node *primary();
-
+static Node *suffix();
 
 // program := function*
 Function * program()
@@ -81,6 +82,17 @@ Function *function()
 
     return func;
 }
+
+static Type *read_type_suffix(Type *base) 
+{
+    if(!consume("["))
+        return base;
+    int number = expect_num();
+    expect("]");
+    base = read_type_suffix(base);
+    return array_of(base, number);
+}
+
 //basetype := "int" "*"*
 static Type * basetype()
 {
@@ -90,14 +102,16 @@ static Type * basetype()
         ty = point_to(ty);
     return ty;
 }
-// func_params := basetype ident(,basetype ident)*
+// func_params := basetype ident("[" num "]")? (,basetype ident ("[" num "]")? )*
 static VarList * func_params()
 {
     VarList *params = calloc (1, sizeof(VarList));
     VarList *cur = params;
 
     Type *ty = basetype();
-    cur->var = new_var(ty,expect_ident());
+    Token *tok = expect_ident();
+    ty = read_type_suffix(ty);
+    cur->var = new_var(ty,tok);
     
     while(!consume(")"))
     {
@@ -105,7 +119,11 @@ static VarList * func_params()
         cur->next = calloc(1, sizeof(VarList));
         cur = cur->next;
         ty = basetype();
-        cur->var = new_var(ty,expect_ident());
+
+        Token *tok = expect_ident();
+        ty = read_type_suffix(ty);
+
+        cur->var = new_var(ty,tok);
     }
 
     return params;
@@ -188,12 +206,15 @@ static Node*stmt()
     expect(";");
     return node;
 }
-// declaration := int ident ("=" expr)";"
+// declaration := basetype ident("[" num  "]") ("=" expr)";"
 static Node * declaration()
 {
     Token *tok;
     Type *type = basetype();
-    Var * lvar = new_var(type, tok = expect_ident());
+    tok = expect_ident();
+    type = read_type_suffix(type);
+
+    Var *lvar = new_var(type, tok);
 
     if (consume(";"))
     {
@@ -288,8 +309,8 @@ static Node * mul()
     }
 }
 
-// unary := ("+" | "-" | "*" | "&")? unary
-//       | primary
+// unary := ("+" | "-" | "*" | "&")? unary  
+//       | suffix
 static Node*unary()
 {
     Token *tok;
@@ -301,22 +322,22 @@ static Node*unary()
         return new_unary(NK_DEREF, unary(),tok);
     if(tok=consume("&"))
         return new_unary(NK_ADDR, unary(),tok);
-    return primary();
+    return suffix();
 }
-//  args:= "(" ( assign  ("," assign)* )? ")"
-//args 的左括号已经被读入
-static Node * args()
+
+
+// suffix := primary ("[" expr "]")*
+static Node * suffix()
 {
-    if(consume(")"))
-        return NULL;
-    Node *node = assign();
-    Node *cur = node;
-    while(consume(","))
+    Node *node = primary();
+    Token *tok;
+    while((tok = consume("[")))
     {
-        cur->next = assign();
-        cur = cur->next;
+        Node *e = expr();
+        node = new_binary(NK_ADD, node, e, tok);
+        node = new_unary(NK_DEREF, node, tok);
+        expect("]");
     }
-    expect(")");
     return node;
 }
 
@@ -351,6 +372,25 @@ static Node * primary()
     }
     return new_num(expect_num());
 }
+
+
+//  args:= "(" ( assign  ("," assign)* )? ")"
+//args 的左括号已经被读入
+static Node * args()
+{
+    if(consume(")"))
+        return NULL;
+    Node *node = assign();
+    Node *cur = node;
+    while(consume(","))
+    {
+        cur->next = assign();
+        cur = cur->next;
+    }
+    expect(")");
+    return node;
+}
+
 
 
 
@@ -407,7 +447,7 @@ static Var *new_var(Type* type,Token*tok)
     var->type = type;
     var->name = strndup(tok->str,tok->strlen);
     var->next = localList;
-    local_offset += type->width;
+    local_offset += type->size;
     var->offset = local_offset;
     localList = var;
     return var;

@@ -6,6 +6,8 @@ static Function *cur_func;
 static Var *tempList;
 
 Var *gen_expr(Node *node);
+Var *get_lvalue(Node *node);
+Var *gen_get_content(Var *var, Token *tok);
 static int new_label()
 {
     static int label = 0;
@@ -47,9 +49,9 @@ static int calc_temp_offset()
     for (int i = 0; i < quadset->size;++i)
     {
         Quad *quad = &quadset->list[i];
-        int lhs_w = quad->lhs &&quad->lhs->kind == VK_TEMP ? quad->lhs->type->width : 0;
-        int rhs_w = quad->rhs &&quad->rhs->kind == VK_TEMP? quad->rhs->type->width : 0;
-        int tar_w = quad->result &&quad->result->kind == VK_TEMP? quad->result->type->width : 0;
+        int lhs_w = quad->lhs &&quad->lhs->kind == VK_TEMP ? quad->lhs->type->size : 0;
+        int rhs_w = quad->rhs &&quad->rhs->kind == VK_TEMP? quad->rhs->type->size : 0;
+        int tar_w = quad->result &&quad->result->kind == VK_TEMP? quad->result->type->size : 0;
 
         offset -= lhs_w + rhs_w;
         
@@ -72,6 +74,14 @@ static Var*new_temp(Type*type)
     return node;
 }
 
+/*
+static Var * array2ptr(Var * Var)
+{
+    Var *newvar = calloc(1, sizeof(Var));
+    memcpy(newvar, var, sizeof(Var));
+    newvar.
+}*/
+
 static Var * gen_binary(QuadKind kind,Var *lhs,Var*rhs,Var*result)
 {
     Quad *quad = new_quad();
@@ -91,6 +101,9 @@ static Var * gen_unary(QuadKind kind,Var *srs,Var *tar)
 }
 void gen_param(Var* var,int param_no)
 {
+    if(is_array(var->type))
+        var = gen_unary(QK_ADDR, var, new_temp(point_to(var->type->base)));
+
     Quad *quad = new_quad();
     quad->op = QK_PARAM;
     quad->lhs = var;
@@ -98,13 +111,18 @@ void gen_param(Var* var,int param_no)
 }
 Var * gen_add(Var*lhs,Var*rhs,Token*tok)
 {
+    if(is_array(lhs->type))
+        lhs = gen_unary(QK_ADDR, lhs, new_temp(point_to(lhs->type->base)));
+    if(is_array(rhs->type))
+        rhs = gen_unary(QK_ADDR, rhs, new_temp(point_to(rhs->type->base)));
+    
     if(is_integer(lhs->type) && is_integer(rhs->type))
         return gen_binary(QK_ADD, lhs, rhs, new_temp(int_type));
     if(is_integer(lhs->type) && is_pointer(rhs->type))
     {
         Var *tol = gen_unary(QK_INT2LONG, lhs, new_temp(long_type));
         Var *lens = gen_binary(QK_MUL, tol,
-                               new_iconst(rhs->type->base->width),
+                               new_iconst(rhs->type->base->size),
                                new_temp(long_type));
         return gen_binary(QK_ADD, rhs, lens, new_temp(rhs->type));
     }
@@ -112,7 +130,7 @@ Var * gen_add(Var*lhs,Var*rhs,Token*tok)
     {
         Var *tol = gen_unary(QK_INT2LONG, rhs, new_temp(long_type));
         Var *lens = gen_binary(QK_MUL, tol,
-                               new_iconst(lhs->type->base->width),
+                               new_iconst(lhs->type->base->size),
                                new_temp(long_type));
         return gen_binary(QK_ADD, lhs, lens, new_temp(lhs->type));
     }
@@ -120,26 +138,31 @@ Var * gen_add(Var*lhs,Var*rhs,Token*tok)
 }
 Var * gen_sub(Var*lhs,Var*rhs,Token*tok)
 {
+    if(is_array(lhs->type))
+        lhs = gen_unary(QK_ADDR, lhs, new_temp(point_to(lhs->type->base)));
+    if(is_array(rhs->type))
+        rhs = gen_unary(QK_ADDR, rhs, new_temp(point_to(rhs->type->base)));
+    
     if(is_integer(lhs->type) && is_integer(rhs->type))
         return gen_binary(QK_SUB, lhs, rhs, new_temp(int_type));
     if(is_integer(rhs->type) && is_pointer(lhs->type))
     {
         Var *tol = gen_unary(QK_INT2LONG, rhs, new_temp(long_type));
         Var *lens = gen_binary(QK_MUL, tol,
-                               new_iconst(lhs->type->base->width),
+                               new_iconst(lhs->type->base->size),
                                new_temp(long_type));
         return gen_binary(QK_SUB, lhs, lens, new_temp(lhs->type));
     }
     if(is_pointer(lhs->type) && is_pointer(rhs->type))
     {
-        if(!is_same(lhs->type,rhs->type))
+        if(!is_same(lhs->type->base,rhs->type->base))
         {
             error_tok(tok, "base of pointer needed be same");
         }
-        Var * result = gen_binary(QK_SUB, lhs, rhs, new_temp(lhs->type));
-        Var *bediv = new_iconst(lhs->type->base->width);
+        Var * result = gen_binary(QK_SUB, lhs, rhs, new_temp(point_to(lhs->type)));
+        Var *bediv = new_iconst(lhs->type->base->size);
         bediv = gen_unary(QK_INT2LONG, bediv, new_temp(lhs->type));
-        return gen_binary(QK_DIV, result, bediv, new_temp(lhs->type->base));
+        return gen_binary(QK_DIV, result, bediv, new_temp(int_type));
     }
     error_tok(tok, "invalid operand{int - int} or {pointer - pointer} or {pointer - int}");
 }
@@ -157,6 +180,12 @@ Var * gen_mul_sub(NodeKind kind ,Var * lhs,Var * rhs,Token*tok)
 }
 Var * gen_cmp(NodeKind kind,Var * lhs,Var * rhs, Token * tok)
 {
+    if(is_array(lhs->type))
+        lhs = gen_unary(QK_ADDR, lhs, new_temp(point_to(lhs->type->base)));
+    if(is_array(rhs->type))
+        rhs = gen_unary(QK_ADDR, rhs, new_temp(point_to(rhs->type->base)));
+    
+    
     if(is_same(lhs->type,rhs->type))
     {
         switch (kind)
@@ -178,36 +207,47 @@ Var * gen_cmp(NodeKind kind,Var * lhs,Var * rhs, Token * tok)
 }
 Var * gen_assign(Var*lhs,Var * rhs,Token*tok)
 {
+    // 需要检查lhs，lhs是一个指针，用于赋值，但返回的应该是是个值。
+    if(is_array(rhs->type))
+        rhs = gen_unary(QK_ADDR, rhs, new_temp(point_to(rhs->type->base)));
+    //Type *ltype = lhs->type->base, rtype = rhs->type;
+    //如果左侧是
     if(lhs->type->base==NULL || !is_same(lhs->type->base,rhs->type))
     {
         error_tok(tok, "two side type needed to be same");
     }
+    else if(is_array(lhs->type->base))
+    {
+        error_tok(tok, "assgin to an array!");
+    }
     else 
     {
-        return gen_unary(QK_ASSIGN, rhs, lhs);
+        gen_unary(QK_ASSIGN, rhs, lhs);
+        return gen_get_content(lhs,tok);
     }
 }
 Var * gen_get_addr(Node* node)
 {
-    if(node->kind == NK_DEREF)
-        return gen_expr(node->lhs);
-    else if(node->kind == NK_VAR)
-    {
-        return gen_unary(QK_ADDR, node->var, new_temp(point_to(node->var->type)));
-    }
-    else
-    {
-        error_tok(node->tok, "not an left value");
-    }  
- 
+    return get_lvalue(node);
 }
 Var * gen_get_content(Var * var,Token * tok)
 {
+    if(is_array(var->type))
+        var = gen_unary(QK_ADDR, var, new_temp(point_to(var->type->base)));
+    
     if(!is_pointer(var->type))
         error_tok(tok, "needed to be a pointer");
-    else 
+    else if(is_array(var->type->base))
+    {
+        //如果解引用的内容是数组的话，那么是取不到内容的，而不如说就是一个地址
+        // 比如int a[5][5],int (*p)[5] = a, *p就是a的值，只是类型此时发生改变
+        var->type = point_to(var->type->base->base);
+        return var;
+    } 
+    else
         return gen_unary(QK_DEREF, var, new_temp(var->type->base));
 }
+
 Var * gen_func_call(Node*node)
 {
     int no = 1;
@@ -234,6 +274,27 @@ void gen_label(int label)
     quad->op = QK_LABEL;
     quad->label = label;
 }
+Var * get_lvalue(Node* node)
+{
+    if(node->kind == NK_DEREF)
+    {
+        Var * v = gen_expr(node->lhs);
+        if(is_array(v->type))
+        {
+            v = gen_unary(QK_ADDR, v, new_temp(point_to(v->type->base)));
+        }
+        return v;
+    }
+    else if(node->kind == NK_VAR)
+    {
+        Type *new_type = point_to(node->var->type);
+        return gen_unary(QK_ADDR, node->var, new_temp(new_type));
+    }
+    else
+    {
+        error_tok(node->tok, "not an lvalue");
+    }  
+}
 Var* gen_expr(Node*node)
 {
     switch (node->kind)
@@ -258,7 +319,7 @@ Var* gen_expr(Node*node)
     case NK_VAR:   // var
         return node->var;
     case NK_ASSIGN:  // =
-        return gen_assign(gen_get_addr(node->lhs),
+        return gen_assign(get_lvalue(node->lhs),
                          gen_expr(node->rhs), node->tok);
     case NK_ADDR:   //  &
         return gen_get_addr(node->lhs);
