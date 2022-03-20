@@ -186,12 +186,13 @@ struct QuadSet
 
 // type 
 
-typedef enum{TY_INT,TY_LONG,TY_PTR} TypeKind;
+typedef enum{TY_INT,TY_LONG,TY_PTR,TY_ARRAY} TypeKind;
 struct Type
 {
     TypeKind kind;
-    int width;
+    int size;
     Type *base;
+    int arr_lens;
 };
 
 extern Type *int_type;
@@ -245,7 +246,11 @@ void gen_code();
 
 //type function
 bool is_integer(Type *ty);
+bool is_ptr_arr(Type *ty);
 bool is_pointer(Type *ty);
+bool is_array(Type *ty);
 bool is_same(Type*ty1,Type*ty2);
+bool is_equal(Type *ty1, Type *ty2);
 Type *point_to(Type *base);
+Type *array_of(Type *base, int arrlen);
 void add_type(Node *node);
